@@ -1,0 +1,54 @@
+{
+    "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+    "vcs": { "enabled": true, "clientKind": "git", "defaultBranch": "main", "useIgnoreFile": true },
+    "files": { "includes": ["**", "!!**/dist", "!**/*.md", "!.github/**/*.yml", "!pnpm-workspace.yaml"] },
+    "linter": {
+        "enabled": true,
+        "domains": { "project": "recommended", "react": "recommended", "types": "recommended", "test": "recommended" },
+        "rules": {
+            "preset": "recommended",
+            "complexity": { "useLiteralKeys": "off" },
+            "suspicious": { "noExplicitAny": "error" },
+            "style": { "useBlockStatements": "error", "noNonNullAssertion": "error", "useImportType": "error" },
+            "nursery": {
+                "noFloatingPromises": "error",
+                "noMisusedPromises": "error",
+                "useExhaustiveSwitchCases": "error"
+            }
+        }
+    },
+    "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 4, "lineWidth": 120 },
+    "css": { "parser": { "tailwindDirectives": true } },
+    "overrides": [
+        {
+            "includes": ["**", "!!src/web/components/**", "!!tests/**"],
+            "linter": {
+                "rules": {
+                    "style": {
+                        "noRestrictedImports": {
+                            "level": "error",
+                            "options": {
+                                "paths": {
+                                    "react": {
+                                        "message": "React hooks are only allowed in src/web/components; views subscribe to view-model stores.",
+                                        "importNames": [
+                                            "useState",
+                                            "useEffect",
+                                            "useRef",
+                                            "useReducer",
+                                            "useMemo",
+                                            "useCallback",
+                                            "useLayoutEffect",
+                                            "useInsertionEffect"
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "plugins": [{ "path": "./config/lint/no-type-assertions.grit", "includes": ["src/**", "tests/**", "scripts/**"] }]
+}

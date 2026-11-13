@@ -1,0 +1,14 @@
+{
+    "$schema": "./node_modules/wrangler/config-schema.json",
+    // The launcher is static. It is served from an origin of its own, because the GitHub tokens members store in
+    // the browser are readable by any script on the same origin. Security headers come from src/web/public/_headers.
+    "name": "ezshare-claude",
+    "compatibility_date": "2026-11-01",
+    "assets": {
+        "directory": "./dist/web",
+        "not_found_handling": "single-page-application"
+    },
+    "workers_dev": false,
+    "preview_urls": false,
+    "routes": [{ "pattern": "ezshare-claude.connect-screen.com", "custom_domain": true }]
+}

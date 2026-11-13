@@ -1,0 +1,77 @@
+name: ezshare chat session
+run-name: ezshare-${{ github.actor_id }}-${{ inputs.request_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Session request (UUID)
+        type: string
+        required: true
+      issue:
+        description: Mailbox issue number
+        type: string
+        required: true
+      client_key:
+        description: The member browser's channel key
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+# One session per member at a time; members never wait on each other.
+concurrency:
+  group: ezshare-${{ github.actor_id }}
+  cancel-in-progress: false
+
+jobs:
+  session:
+    # Only the default branch's code may serve a session, and only on its first attempt: a re-run could be
+    # started by another member. The step verifies both again against the API.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    env:
+      EZSHARE_AGENT_USER: ezshare-agent
+      EZSHARE_AGENT_HOME: /home/ezshare-agent
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Install runner dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile --prod
+      - name: Install the agent tools from their lockfile
+        run: |
+          sudo install -d -o "$USER" -m 0755 /opt/ezshare-tools
+          cp tools/package.json tools/package-lock.json /opt/ezshare-tools/
+          npm ci --prefix /opt/ezshare-tools --no-audit --no-fund
+          echo "/opt/ezshare-tools/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Create the unprivileged agent account
+        # Claude and Morty run here, unable to read this job's token, channel key or other processes.
+        run: |
+          sudo useradd --create-home --home-dir "$EZSHARE_AGENT_HOME" --shell /usr/sbin/nologin "$EZSHARE_AGENT_USER"
+          sudo -u "$EZSHARE_AGENT_USER" mkdir "$EZSHARE_AGENT_HOME/workspace"
+      - name: Create the session channel key
+        id: channel
+        run: node src/runner/main.ts prepare
+      - name: Publish the channel key
+        # Only this run can add artifacts to itself, which is what lets the browser trust the key.
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.channel.outputs.artifact-name }}
+          path: ${{ steps.channel.outputs.artifact-path }}
+          retention-days: 1
+          if-no-files-found: error
+      - name: Serve the session
+        run: node src/runner/main.ts chat
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EZSHARE_CLAUDE_TOKEN: ${{ secrets.EZSHARE_CLAUDE_TOKEN }}
