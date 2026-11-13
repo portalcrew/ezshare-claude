@@ -1,10 +1,20 @@
+import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as v from "valibot";
 import { cleanupSignal, withDeadline } from "../shared/async.ts";
-import { AppError } from "../shared/errors.ts";
-import { claudeTokenSchema, mortyUrl, parseJson, requestIdSchema } from "../shared/protocol.ts";
+import { AppError, toAppError } from "../shared/errors.ts";
+import {
+    claudeTokenSchema,
+    type HistoryEnd,
+    type HistoryMode,
+    type HistoryStart,
+    mortyUrl,
+    parseJson,
+    requestIdSchema,
+} from "../shared/protocol.ts";
 import { agentCommand, runAgentCommand } from "./agent-process.ts";
-import type { ActionsContext, StepEnvironment } from "./context.ts";
+import { type ActionsContext, historyArchivePath, type StepEnvironment } from "./context.ts";
+import { type HistoryOwner, latestSessionId, restoreHistory, saveHistory } from "./history-archive.ts";
 import { type ChatRunnerChannel, createChatChannel, type RunnerPorts, runSession } from "./session.ts";
 
 const STOP_POLL_MS = 15_000;
@@ -34,14 +44,52 @@ export async function runChat(
             if (!v.is(claudeTokenSchema, token)) {
                 throw new AppError("shared_account_missing");
             }
-            const agent = new AgentSession(context, environment["PATH"] ?? "", token);
+            const path = environment["PATH"] ?? "";
+            const agent = new AgentSession(context, path, token);
+            const owner = { repository: context.repository, userId: context.userId };
+            const archive = historyArchivePath(context.runnerTemp);
+            // Set only once the agent's home holds exactly what may be saved over the member's archive.
+            let saving: { readonly key: string; readonly sessionId: string } | null = null;
+            let history: HistoryEnd = "not_archived";
             try {
                 await withDeadline(Math.max(0, deadline - ports.clock.now()), sessionSignal, async (bounded) => {
+                    ports.diagnostics({ event: "session.stage", stage: "awaiting_history" });
+                    const request = await waitForHistory(channel, deadline, ports, bounded);
+                    if (request.kind === "stop") {
+                        return;
+                    }
+                    let start: HistoryStart = "off";
+                    let restoredSession: string | null = null;
+                    if (request.kind === "history") {
+                        ports.diagnostics({ event: "session.stage", stage: "restoring_history" });
+                        const restored =
+                            request.mode === "replace"
+                                ? ({ kind: "none" } as const)
+                                : await restoreHistory(archive, request.key, owner, context.agent, path, bounded);
+                        switch (restored.kind) {
+                            case "none":
+                                start = "new";
+                                break;
+                            case "unreadable":
+                                start = "unreadable";
+                                break;
+                            case "restored":
+                                start = "restored";
+                                restoredSession = restored.sessionId;
+                                break;
+                            default:
+                                return restored satisfies never;
+                        }
+                    }
                     ports.diagnostics({ event: "session.stage", stage: "starting_agent" });
-                    const sessionId = await agent.startClaude(bounded);
+                    // A restored conversation already has its Claude session; only a new one needs creating.
+                    const sessionId = restoredSession ?? (await agent.startClaude(bounded));
+                    if (request.kind === "history" && start !== "unreadable") {
+                        saving = { key: request.key, sessionId };
+                    }
                     ports.diagnostics({ event: "session.stage", stage: "connecting_morty" });
                     const ready = await agent.connectMorty(sessionId, bounded);
-                    await channel.send({ kind: "ready", body: ready }, bounded);
+                    await channel.send({ kind: "ready", body: { ...ready, history: start } }, bounded);
                     ports.diagnostics({ event: "session.stage", stage: "ready" });
                     await waitForStop(channel, deadline, ports, bounded);
                 });
@@ -53,10 +101,72 @@ export async function runChat(
             } finally {
                 ports.diagnostics({ event: "session.stage", stage: "stopping" });
                 await agent.stopMorty();
+                if (saving !== null) {
+                    history = await archiveHistory(context, path, owner, archive, saving, ports);
+                }
             }
-            await channel.send({ kind: "stopped", body: {} }, cleanupSignal(10_000));
+            await channel.send({ kind: "stopped", body: { history } }, cleanupSignal(10_000));
         },
     });
+}
+
+const HISTORY_WAIT_MS = 5 * 60_000;
+const HISTORY_POLL_MS = 3_000;
+const SAVE_TIMEOUT_MS = 6 * 60_000;
+
+/**
+ * Waits for the member's browser to hand over the history key. A browser that stays away (the launcher page was
+ * closed while the run started) leaves this session without history rather than blocking it.
+ */
+async function waitForHistory(
+    channel: ChatRunnerChannel,
+    deadline: number,
+    ports: RunnerPorts,
+    signal: AbortSignal,
+): Promise<
+    | { readonly kind: "history"; readonly key: string; readonly mode: HistoryMode }
+    | { readonly kind: "stop" }
+    | { readonly kind: "absent" }
+> {
+    const until = Math.min(deadline, ports.clock.now() + HISTORY_WAIT_MS);
+    for (;;) {
+        const messages = await channel.receive(signal);
+        if (messages.some((message) => message.kind === "stop")) {
+            return { kind: "stop" };
+        }
+        // The first key wins; a reloaded browser may send its key again.
+        const history = messages.find((message) => message.kind === "history");
+        if (history !== undefined) {
+            return { kind: "history", key: history.body.key, mode: history.body.mode };
+        }
+        if (ports.clock.now() >= until) {
+            return { kind: "absent" };
+        }
+        await ports.clock.sleep(Math.min(HISTORY_POLL_MS, until - ports.clock.now()), signal);
+    }
+}
+
+/** Archives the agent's home for the next session and tells the save step to keep it. Never fails the session. */
+async function archiveHistory(
+    context: ActionsContext,
+    path: string,
+    owner: HistoryOwner,
+    archive: string,
+    saving: { readonly key: string; readonly sessionId: string },
+    ports: RunnerPorts,
+): Promise<HistoryEnd> {
+    ports.diagnostics({ event: "session.stage", stage: "saving_history" });
+    try {
+        const signal = cleanupSignal(SAVE_TIMEOUT_MS);
+        const workspace = join(context.agent.home, "workspace");
+        const sessionId = await latestSessionId(context.agent, path, workspace, saving.sessionId, signal);
+        await saveHistory(archive, saving.key, owner, context.agent, path, sessionId, signal);
+        await appendFile(context.githubOutput, "history=archived\n");
+        return "archived";
+    } catch (cause) {
+        ports.diagnostics({ event: "session.failed", code: toAppError(cause).code });
+        return "not_archived";
+    }
 }
 
 async function waitForStop(

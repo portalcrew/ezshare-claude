@@ -10,6 +10,9 @@ export type DiagnosticRecord =
           readonly stage:
               | "verifying"
               | "verified"
+              | "awaiting_history"
+              | "restoring_history"
+              | "saving_history"
               | "starting_agent"
               | "connecting_morty"
               | "ready"

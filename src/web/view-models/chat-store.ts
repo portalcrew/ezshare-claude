@@ -6,6 +6,8 @@ import {
     type ChatRunnerMessage,
     chatBrowserMessageSchema,
     chatRunnerMessageSchema,
+    type HistoryEnd,
+    type HistoryStart,
     mortyUrl,
 } from "../../shared/protocol.ts";
 import type { PendingSession } from "../services/vault.ts";
@@ -25,7 +27,7 @@ const POLL_IDLE_MS = 30_000;
 
 /** How the member's previous session ended, shown until the next one starts. */
 export type ChatOutcome =
-    | { readonly kind: "stopped" }
+    | { readonly kind: "stopped"; readonly history: HistoryEnd }
     | { readonly kind: "expired" }
     | { readonly kind: "failed"; readonly code: ErrorCode };
 
@@ -41,11 +43,12 @@ export type ChatPhase =
           readonly session: PendingSession;
           readonly url: string;
           readonly accessExpiresAt: string;
+          readonly history: HistoryStart;
       }
     | { readonly kind: "stopping"; readonly session: PendingSession; readonly forced: boolean };
 
 /** User commands in flight; the view disables the matching controls. */
-export type ChatCommand = "start" | "stop" | "force_stop" | "cancel_run" | null;
+export type ChatCommand = "start" | "stop" | "force_stop" | "cancel_run" | "replace_history" | null;
 
 export interface ChatState {
     readonly phase: ChatPhase;
@@ -54,6 +57,8 @@ export interface ChatState {
     readonly problem: ErrorCode | null;
     /** The last command failed; the phase did not change. */
     readonly commandError: ErrorCode | null;
+    /** The next session will save its history over an archive this browser cannot read. */
+    readonly replacingHistory: boolean;
 }
 
 export interface ChatActions {
@@ -63,6 +68,8 @@ export interface ChatActions {
     readonly stop: () => void;
     readonly forceStop: () => void;
     readonly cancelRun: (runId: string) => void;
+    /** Lets the next session replace a saved history this browser cannot read. */
+    readonly replaceHistory: () => void;
     readonly refresh: () => void;
 }
 
@@ -74,6 +81,8 @@ export function createChatStore(member: MemberContext) {
     let wake: AbortController | null = null;
     // A session that reported its end may still be cleaning up; it is not another unfinished session.
     let ending: string | null = null;
+    // Sessions this page has handed its history key to; the runner keeps the first key it receives.
+    const keyed = new Set<string>();
 
     return createStore<ChatState & ChatActions>()((set, get) => {
         const observe = async (session: PendingSession, signal: AbortSignal): Promise<ChatPhase> => {
@@ -108,8 +117,29 @@ export function createChatStore(member: MemberContext) {
                     const outcome = outcomeOf(messages, observation.kind === "finished");
                     if (outcome !== null) {
                         ending = observation.kind === "running" ? observation.run.id : null;
+                        keyed.delete(session.requestId);
+                        if (outcome.kind === "stopped" && outcome.history === "archived") {
+                            await member.vault.setHistoryMode(
+                                member.repository.name,
+                                member.user.id,
+                                "continue",
+                                signal,
+                            );
+                        }
                         await abandonSession(member, session);
                         return { kind: "idle", outcome };
+                    }
+                    if (
+                        observation.kind === "running" &&
+                        observation.channel !== null &&
+                        stopping === null &&
+                        !keyed.has(session.requestId) &&
+                        !messages.some((message) => message.kind === "ready")
+                    ) {
+                        const history = await member.vault.history(member.repository.name, member.user.id, signal);
+                        const message: ChatBrowserMessage = { kind: "history", body: history };
+                        await observation.channel.send(message, signal);
+                        keyed.add(session.requestId);
                     }
                     if (stopping !== null) {
                         return stopping;
@@ -121,6 +151,7 @@ export function createChatStore(member: MemberContext) {
                             session,
                             url: mortyUrl(ready.body.url),
                             accessExpiresAt: ready.body.accessExpiresAt,
+                            history: ready.body.history,
                         };
                     }
                     return { kind: "preparing", session };
@@ -162,7 +193,8 @@ export function createChatStore(member: MemberContext) {
                 default:
                     return phase satisfies never;
             }
-            set({ phase: next, problem: null });
+            const history = await member.vault.history(member.repository.name, member.user.id, signal);
+            set({ phase: next, problem: null, replacingHistory: history.mode === "replace" });
         };
 
         const idleOrBusy = async (outcome: ChatOutcome | null, signal: AbortSignal): Promise<ChatPhase> => {
@@ -231,6 +263,7 @@ export function createChatStore(member: MemberContext) {
             command: null,
             problem: null,
             commandError: null,
+            replacingHistory: false,
             open: () => {
                 void loop(work.open());
             },
@@ -296,6 +329,11 @@ export function createChatStore(member: MemberContext) {
                     }
                     set({ phase: { kind: "stopping", session: phase.session, forced: true } });
                 }),
+            replaceHistory: () =>
+                command("replace_history", async (signal) => {
+                    await member.vault.setHistoryMode(member.repository.name, member.user.id, "replace", signal);
+                    set({ replacingHistory: true });
+                }),
             cancelRun: (runId) =>
                 command("cancel_run", async (signal) => {
                     const phase = get().phase;
@@ -318,8 +356,12 @@ function outcomeOf(
     if (failure !== undefined) {
         return { kind: "failed", code: failure.body.code };
     }
-    if (messages.some((message) => message.kind === "stopped") || finished) {
-        return { kind: "stopped" };
+    const stopped = messages.find((message) => message.kind === "stopped");
+    if (stopped !== undefined) {
+        return { kind: "stopped", history: stopped.body.history };
+    }
+    if (finished) {
+        return { kind: "stopped", history: "not_archived" };
     }
     return null;
 }

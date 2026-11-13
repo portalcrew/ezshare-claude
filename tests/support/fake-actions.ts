@@ -1,9 +1,9 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prepareChannelKey } from "../../src/runner/channel-key.ts";
 import { runChat } from "../../src/runner/chat.ts";
-import { readActionsContext } from "../../src/runner/context.ts";
+import { historyArchivePath, readActionsContext } from "../../src/runner/context.ts";
 import type { DiagnosticRecord } from "../../src/runner/diagnostics.ts";
 import { runLogin } from "../../src/runner/login.ts";
 import { toAppError } from "../../src/shared/errors.ts";
@@ -41,6 +41,8 @@ export async function startFakeActions(
         await chmod(join(bin, name), 0o755);
     }
     const jobs = new Map<number, Job>();
+    // The Actions cache of the default branch: entry key -> directory, in creation order.
+    const cache = new Map<string, string>();
     let hold = false;
     const queued: FakeRun[] = [];
 
@@ -49,9 +51,22 @@ export async function startFakeActions(
         const directory = join(root, `run-${run.id}`);
         const runnerTemp = join(directory, "temp");
         await mkdir(runnerTemp, { recursive: true });
+        // Every run is a fresh VM whose agent account has the same home path, which Claude's project names use.
+        await rm(job.agentHome, { recursive: true, force: true });
+        await rm(`${job.agentHome}.agent-env.jsonl`, { force: true });
         await mkdir(join(job.agentHome, "workspace"), { recursive: true });
         const output = join(directory, "github-output");
         await writeFile(output, "");
+        const historyDirectory = join(runnerTemp, "ezshare-history");
+        const cacheKey = `ezshare-history-${run.actor.id}-run-${run.id}`;
+        if (purpose === "chat") {
+            // actions/cache/restore: the exact key, else the newest entry under the prefix.
+            const prefix = `ezshare-history-${run.actor.id}-run-`;
+            const hit = cache.get(cacheKey) ?? [...cache].reverse().find(([key]) => key.startsWith(prefix))?.[1];
+            if (hit !== undefined) {
+                await cp(hit, historyDirectory, { recursive: true });
+            }
+        }
         const eventPath = join(directory, "event.json");
         await writeFile(eventPath, JSON.stringify({ inputs: run.inputs }));
         run.status = "in_progress";
@@ -73,6 +88,7 @@ export async function startFakeActions(
             GITHUB_REF: "refs/heads/main",
             GITHUB_WORKFLOW_REF: `${options.repository}/.github/workflows/${run.workflow}@refs/heads/main`,
             GITHUB_API_URL: github.origin,
+            GITHUB_OUTPUT: output,
             GH_TOKEN: token,
             RUNNER_TEMP: runnerTemp,
             EZSHARE_AGENT_USER: "ezshare-agent",
@@ -82,14 +98,27 @@ export async function startFakeActions(
         };
         const ports = { clock: options.clock, diagnostics: (record: DiagnosticRecord) => job.diagnostics.push(record) };
         const context = await readActionsContext(environment, purpose, run.cancel.signal);
-        await (purpose === "chat" ? runChat : runLogin)(context, environment, ports, run.cancel.signal);
+        try {
+            await (purpose === "chat" ? runChat : runLogin)(context, environment, ports, run.cancel.signal);
+        } finally {
+            await cp(`${job.agentHome}.agent-env.jsonl`, join(directory, "agent-env.jsonl")).catch(() => undefined);
+            // actions/cache/save, `if: always() && steps.serve.outputs.history == 'archived'`; entries are immutable.
+            if (/^history=archived$/mu.test(await readFile(output, "utf8")) && !cache.has(cacheKey)) {
+                const saved = join(root, "cache", cacheKey);
+                await cp(historyDirectory, saved, { recursive: true });
+                cache.set(cacheKey, saved);
+            }
+        }
+        if (historyArchivePath(runnerTemp) !== join(historyDirectory, "history.bin")) {
+            throw new Error("The simulated cache path must match chat.yml");
+        }
     };
 
     const start = (run: FakeRun) => {
         if (run.status === "completed") {
             return;
         }
-        const agentHome = join(root, `agent-${run.id}`);
+        const agentHome = join(root, `agent-${run.actor.id}`);
         const diagnostics: DiagnosticRecord[] = [];
         const job: Job = {
             run,
@@ -135,12 +164,19 @@ export async function startFakeActions(
                 start(run);
             }
         },
+        /** Saved cache entries by key, as the repository's Actions cache would list them. */
+        cache,
         /** Starts a run directly, as if dispatched by `run.actor` with arbitrary inputs. */
         start,
         agentLog: async (runId: number) => {
             const job = jobs.get(runId);
+            // A finished run's log is kept with the run; a running one is read live.
             const text =
-                job === undefined ? "" : await readFile(join(job.agentHome, "agent-env.jsonl"), "utf8").catch(() => "");
+                job === undefined
+                    ? ""
+                    : await readFile(join(root, `run-${runId}`, "agent-env.jsonl"), "utf8").catch(() =>
+                          readFile(`${job.agentHome}.agent-env.jsonl`, "utf8").catch(() => ""),
+                      );
             return text
                 .split("\n")
                 .filter((line) => line.length > 0)

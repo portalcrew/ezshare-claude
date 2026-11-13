@@ -33,7 +33,14 @@ export interface ActionsContext {
     readonly apiOrigin: string;
     readonly token: string;
     readonly runnerTemp: string;
+    /** The step's `GITHUB_OUTPUT` file, which tells later steps whether to save the history archive. */
+    readonly githubOutput: string;
     readonly agent: AgentAccount;
+}
+
+/** Where the cache steps restore and save a member's encrypted history; must match `chat.yml`. */
+export function historyArchivePath(runnerTemp: string): string {
+    return `${runnerTemp}/ezshare-history/history.bin`;
 }
 
 const MAX_EVENT_BYTES = 1_000_000;
@@ -95,6 +102,7 @@ export async function readActionsContext(
         apiOrigin: apiOrigin(required("GITHUB_API_URL")),
         token: required("GH_TOKEN"),
         runnerTemp: absolute(required("RUNNER_TEMP")),
+        githubOutput: absolute(required("GITHUB_OUTPUT")),
         agent: { user, home: absolute(required("EZSHARE_AGENT_HOME")) },
     };
 }

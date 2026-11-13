@@ -28,6 +28,8 @@ export const userIdSchema = v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,15}$/u));
 export const runIdSchema = v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,18}$/u));
 /** An X25519 public key: 32 bytes as canonical unpadded base64url. */
 export const channelKeySchema = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/u));
+/** A member's history key: 32 random bytes as canonical unpadded base64url. Only the member's browser keeps it. */
+export const historyKeySchema = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/u));
 
 /** The workflow_dispatch inputs. They are fixed when the member's own token dispatches the run. */
 export const dispatchInputsSchema = v.object({
@@ -108,7 +110,7 @@ export const envelopeSchema = v.strictObject({
     runId: runIdSchema,
     sender: v.picklist(["browser", "runner"]),
     sequence: sequenceSchema,
-    kind: v.picklist(["challenge", "code", "token", "ready", "stop", "stopped", "failed"]),
+    kind: v.picklist(["challenge", "code", "token", "history", "ready", "stop", "stopped", "failed"]),
     nonce: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{16}$/u)),
     data: sealedTextSchema,
 });
@@ -145,6 +147,25 @@ export const runnerFailureSchema = v.strictObject({
 });
 export type RunnerFailure = v.InferOutput<typeof runnerFailureSchema>["code"];
 
+/**
+ * How a member's saved history entered a session: continued from the last archive, started empty, left
+ * untouched because this browser's key cannot read the archive (another browser, or cleared site data), or off
+ * because the browser was away while the session started and never handed over its key.
+ */
+const historyStartSchema = v.picklist(["restored", "new", "unreadable", "off"]);
+export type HistoryStart = v.InferOutput<typeof historyStartSchema>;
+
+/** Whether a session's history was archived for the next session. */
+const historyEndSchema = v.picklist(["archived", "not_archived"]);
+export type HistoryEnd = v.InferOutput<typeof historyEndSchema>;
+
+/**
+ * `continue` restores the member's archive and saves over it only if it could be read. `replace` ignores the
+ * archive and saves this session's history in its place, which is how a member leaves an unreadable one behind.
+ */
+export const historyModeSchema = v.picklist(["continue", "replace"]);
+export type HistoryMode = v.InferOutput<typeof historyModeSchema>;
+
 /** Messages per channel direction. Any other kind on a channel is a protocol violation. */
 export const chatRunnerMessageSchema = v.variant("kind", [
     v.strictObject({
@@ -152,12 +173,17 @@ export const chatRunnerMessageSchema = v.variant("kind", [
         body: v.strictObject({
             url: v.pipe(v.string(), v.maxLength(8192)),
             accessExpiresAt: v.pipe(v.string(), v.isoTimestamp()),
+            history: historyStartSchema,
         }),
     }),
-    v.strictObject({ kind: v.literal("stopped"), body: v.strictObject({}) }),
+    v.strictObject({ kind: v.literal("stopped"), body: v.strictObject({ history: historyEndSchema }) }),
     v.strictObject({ kind: v.literal("failed"), body: runnerFailureSchema }),
 ]);
 export const chatBrowserMessageSchema = v.variant("kind", [
+    v.strictObject({
+        kind: v.literal("history"),
+        body: v.strictObject({ key: historyKeySchema, mode: historyModeSchema }),
+    }),
     v.strictObject({ kind: v.literal("stop"), body: v.strictObject({}) }),
 ]);
 export const loginRunnerMessageSchema = v.variant("kind", [
