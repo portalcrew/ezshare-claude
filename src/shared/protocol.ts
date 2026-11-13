@@ -6,6 +6,8 @@ export type Purpose = "chat" | "login";
 
 const CHAT_LIFETIME_MS = 4 * 60 * 60_000;
 const LOGIN_LIFETIME_MS = 15 * 60_000;
+/** A ready session with no new Claude turn for this long ends early and frees its runner. */
+export const CHAT_IDLE_STOP_MS = 15 * 60_000;
 export const SHARED_SECRET_NAME = "EZSHARE_CLAUDE_TOKEN";
 
 export function lifetime(purpose: Purpose): number {

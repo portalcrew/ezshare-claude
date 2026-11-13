@@ -4,6 +4,7 @@ import * as v from "valibot";
 import { cleanupSignal, withDeadline } from "../shared/async.ts";
 import { AppError, toAppError } from "../shared/errors.ts";
 import {
+    CHAT_IDLE_STOP_MS,
     claudeTokenSchema,
     type HistoryEnd,
     type HistoryMode,
@@ -19,8 +20,6 @@ import { claudeProject, type HistoryOwner, latestSessionId, restoreHistory, save
 import { type ChatRunnerChannel, createChatChannel, type RunnerPorts, runSession } from "./session.ts";
 
 const STOP_POLL_MS = 15_000;
-/** A ready session with no new Claude turn for this long ends early and frees its runner. */
-const IDLE_STOP_MS = 15 * 60_000;
 
 const mortyReadySchema = v.object({
     status: v.literal("ready"),
@@ -185,7 +184,7 @@ async function archiveHistory(
 }
 
 /**
- * Waits until the member asks to stop, the lifetime ends, or the conversation has been idle for `IDLE_STOP_MS`.
+ * Waits until the member asks to stop, the lifetime ends, or the conversation has been idle for `CHAT_IDLE_STOP_MS`.
  * `activity` fingerprints the Claude transcripts; a changed fingerprint is a new turn. An unreadable fingerprint
  * counts as activity, so a probe failure can never end a session early.
  */
@@ -209,7 +208,7 @@ async function waitForStop(
             fingerprint = current;
             lastActive = now;
         }
-        const idleUntil = lastActive + IDLE_STOP_MS;
+        const idleUntil = lastActive + CHAT_IDLE_STOP_MS;
         if (now >= idleUntil) {
             ports.diagnostics({ event: "session.stage", stage: "idle" });
             return;
