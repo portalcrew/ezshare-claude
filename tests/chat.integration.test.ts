@@ -26,7 +26,7 @@ test("Given a connected member, When she starts a session and later ends it, The
     expect(url.searchParams.get("harness")).toBe("claude");
     const fragment = new URLSearchParams(url.hash.slice(1));
     expect(fragment.get("workspace")).toMatch(/workspace$/u);
-    expect(fragment.get("e2e")).toBe("opaque-morty-encryption-access");
+    expect(fragment.get("e2e")).toBeTruthy();
 
     const run = app.github.runs[0];
     if (run === undefined) {

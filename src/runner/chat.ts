@@ -91,6 +91,8 @@ export async function runChat(
                         ports.diagnostics({ event: "session.stage", stage: "starting_agent" });
                         // A restored conversation already has its Claude session; only a new one needs creating.
                         const sessionId = restoredSession ?? (await agent.startClaude(bounded));
+                        await agent.verifyClaudeSession(sessionId, bounded);
+                        ports.diagnostics({ event: "session.stage", stage: "verified_history" });
                         if (request.kind === "history" && start !== "unreadable") {
                             saving = { key: request.key, sessionId };
                         }
@@ -274,6 +276,21 @@ class AgentSession {
             throw new AppError("agent_failed");
         }
         return sessionId;
+    };
+
+    /** Verify the archived native transcript before handing its session id to Morty. */
+    readonly verifyClaudeSession = async (sessionId: string, signal: AbortSignal): Promise<void> => {
+        await runAgentCommand(
+            await agentCommand(
+                this.#context.agent,
+                this.#path,
+                this.#workspace,
+                "test",
+                ["-s", join(this.#context.agent.home, claudeProject(this.#workspace), `${sessionId}.jsonl`)],
+                this.#variables,
+            ),
+            { timeout: 10_000, failure: "agent_failed", signal },
+        );
     };
 
     readonly connectMorty = async (

@@ -23,6 +23,7 @@ export type DiagnosticRecord =
               | "verified"
               | "awaiting_history"
               | "restoring_history"
+              | "verified_history"
               | "saving_history"
               | "starting_agent"
               | "connecting_morty"
