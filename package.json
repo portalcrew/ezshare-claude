@@ -21,8 +21,7 @@
         "check:architecture": "node scripts/check-architecture.ts",
         "lint": "biome ci --error-on-warnings && pnpm check:no-chinese && pnpm check:view-hooks && pnpm check:store-subscribe && pnpm check:architecture",
         "knip": "knip",
-        "ci:check": "pnpm typecheck && pnpm lint && pnpm knip && pnpm test && pnpm build",
-        "deploy": "pnpm ci:check && wrangler deploy"
+        "ci:check": "pnpm typecheck && pnpm lint && pnpm knip && pnpm test && pnpm build"
     },
     "dependencies": {
         "@xterm/headless": "6.0.0",
@@ -50,7 +49,6 @@
         "tailwindcss": "4.3.5",
         "typescript": "7.0.2",
         "vite": "8.3.8",
-        "vitest": "5.1.0",
-        "wrangler": "4.160.0"
+        "vitest": "5.1.0"
     }
 }
