@@ -1,0 +1,10 @@
+engineStrict: true
+minimumReleaseAge: 1440
+allowBuilds:
+  esbuild: true
+  # The local Workers runtime is not needed to deploy static assets.
+  workerd: false
+packageExtensions:
+  dependency-cruiser@18:
+    dependencies:
+      typescript: 6.0.3

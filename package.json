@@ -1,0 +1,56 @@
+{
+    "name": "ezshare-claude",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "license": "UNLICENSED",
+    "packageManager": "pnpm@11.25.0",
+    "engines": {
+        "node": ">=24.22.1 <25",
+        "pnpm": ">=11.25.0 <12"
+    },
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "runner": "node src/runner/main.ts",
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "check:no-chinese": "node scripts/check-no-chinese.ts",
+        "check:view-hooks": "node scripts/check-view-hooks.ts",
+        "check:store-subscribe": "node scripts/check-store-subscribe.ts",
+        "check:architecture": "node scripts/check-architecture.ts",
+        "lint": "biome ci --error-on-warnings && pnpm check:no-chinese && pnpm check:view-hooks && pnpm check:store-subscribe && pnpm check:architecture",
+        "knip": "knip",
+        "ci:check": "pnpm typecheck && pnpm lint && pnpm knip && pnpm test && pnpm build",
+        "deploy": "pnpm ci:check && wrangler deploy"
+    },
+    "dependencies": {
+        "@xterm/headless": "6.0.0",
+        "clsx": "2.1.1",
+        "libsodium-wrappers": "0.8.4",
+        "react": "19.3.1",
+        "react-dom": "19.3.1",
+        "tailwind-merge": "3.7.0",
+        "valibot": "1.5.0",
+        "zustand": "5.1.0"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "2.6.7",
+        "@tailwindcss/vite": "4.3.5",
+        "@testing-library/dom": "10.4.2",
+        "@testing-library/user-event": "14.6.10",
+        "@types/node": "24.10.1",
+        "@types/react": "19.3.0",
+        "@types/react-dom": "19.3.0",
+        "@vitejs/plugin-react": "6.3.0",
+        "dependency-cruiser": "18.7.2",
+        "fake-indexeddb": "6.2.8",
+        "happy-dom": "21.0.4",
+        "knip": "6.45.1",
+        "tailwindcss": "4.3.5",
+        "typescript": "7.0.2",
+        "vite": "8.3.8",
+        "vitest": "5.1.0",
+        "wrangler": "4.160.0"
+    }
+}
