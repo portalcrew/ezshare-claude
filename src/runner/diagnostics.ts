@@ -33,7 +33,9 @@ export type DiagnosticRecord =
               | "SETUP_FAILED"
               | "SETUP_TIMEOUT"
               | "TIMEOUT"
-              | "UNRECOGNIZED";
+              | "UNRECOGNIZED"
+              | "HANDOFF_MISMATCH"
+              | "READY_OUTPUT_INVALID";
           readonly exitCode: number | null;
       };
 

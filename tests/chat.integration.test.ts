@@ -24,6 +24,9 @@ test("Given a connected member, When she starts a session and later ends it, The
     const url = new URL(link.getAttribute("href") ?? "");
     expect(url.origin).toBe("https://morty.build");
     expect(url.searchParams.get("harness")).toBe("claude");
+    const fragment = new URLSearchParams(url.hash.slice(1));
+    expect(fragment.get("workspace")).toMatch(/workspace$/u);
+    expect(fragment.get("e2e")).toBe("opaque-morty-encryption-access");
 
     const run = app.github.runs[0];
     if (run === undefined) {
@@ -94,7 +97,8 @@ test("Given another member can post as the Actions bot, When she forges a ready 
     app.actions.release();
     const link = await app.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
     expect(link.getAttribute("href")).not.toBe(attackerLink);
-    expect(new URL(link.getAttribute("href") ?? "").searchParams.get("workspace")).toMatch(/workspace$/u);
+    const ownLink = new URL(link.getAttribute("href") ?? "");
+    expect(new URLSearchParams(ownLink.hash.slice(1)).get("workspace")).toMatch(/workspace$/u);
     expect(queryByRole(body, "alert")).toBeNull();
 });
 
@@ -235,4 +239,24 @@ test("Given Morty rejects setup, When a member starts a session, Then she sees o
     expect(job.diagnostics).toContainEqual({ event: "morty.failed", code: "INVALID_REQUEST", exitCode: 1 });
     expect(JSON.stringify(job.diagnostics)).not.toContain("private-provider-detail");
     expect(JSON.stringify(job.diagnostics)).not.toContain("private-code");
+});
+
+test("Given an older Morty handoff with workspace in the query, When a session starts, Then its validated private link still opens", async () => {
+    app = await createTestApp({ mortyHandoff: "legacy" });
+    const body = document.body;
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    const link = await app.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
+    expect(new URL(link.getAttribute("href") ?? "").searchParams.get("workspace")).toMatch(/workspace$/u);
+    expect(queryByRole(body, "alert")).toBeNull();
+});
+
+test("Given a Morty link with conflicting query and fragment workspaces, When setup completes, Then the launcher rejects it without exposing a chat link", async () => {
+    app = await createTestApp({ mortyHandoff: "conflicting" });
+    const body = document.body;
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    const alert = await app.eventually(() => getByRole(body, "alert"));
+    expect(alert.textContent).toContain("Morty could not connect");
+    expect(queryByRole(body, "link", { name: /Open chat/u })).toBeNull();
 });

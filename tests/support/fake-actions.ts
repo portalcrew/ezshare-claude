@@ -31,6 +31,7 @@ export async function startFakeActions(
         readonly repository: string;
         readonly clock: TestClock;
         readonly mortyFailure?: boolean;
+        readonly mortyHandoff?: "legacy" | "encrypted" | "conflicting";
         readonly sharedToken: () => string | null;
     },
 ) {
@@ -60,6 +61,12 @@ export async function startFakeActions(
         await rm(job.agentHome, { recursive: true, force: true });
         await rm(`${job.agentHome}.agent-env.jsonl`, { force: true });
         await mkdir(join(job.agentHome, "workspace"), { recursive: true });
+        if (options.mortyHandoff === "conflicting") {
+            await writeFile(join(job.agentHome, ".morty-conflicting-handoff"), "conflicting");
+        }
+        if (options.mortyHandoff === "legacy") {
+            await writeFile(join(job.agentHome, ".morty-legacy-handoff"), "legacy");
+        }
         if (options.mortyFailure === true) {
             await writeFile(join(job.agentHome, ".morty-failure"), "INVALID_REQUEST");
         }
