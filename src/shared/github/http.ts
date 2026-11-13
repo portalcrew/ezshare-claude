@@ -1,5 +1,5 @@
 import { withDeadline } from "../async.ts";
-import { AppError, throwIfCancelled } from "../errors.ts";
+import { AppError, type ErrorCode, throwIfCancelled } from "../errors.ts";
 import { parseJson } from "../protocol.ts";
 
 export const GITHUB_API_ORIGIN = "https://api.github.com";
@@ -96,7 +96,7 @@ export class GitHubHttp {
                 }
                 if (!response.ok) {
                     await response.body?.cancel();
-                    throw failure(response);
+                    throw failure(response, method, path);
                 }
                 if (response.status === 201 || response.status === 202 || response.status === 204) {
                     const text = await readBounded(response);
@@ -118,14 +118,14 @@ export class GitHubHttp {
     };
 }
 
-function failure(response: Response): AppError {
+function failure(response: Response, method: Method, path: string): AppError {
     switch (response.status) {
         case 401:
             return new AppError("unauthenticated");
         case 403:
             return response.headers.get("x-ratelimit-remaining") === "0"
                 ? new AppError("rate_limited")
-                : new AppError("forbidden");
+                : new AppError(permissionFailure(method, path));
         case 404:
             return new AppError("not_found");
         case 409:
@@ -168,4 +168,21 @@ async function readBounded(response: Response): Promise<string> {
         offset += chunk.byteLength;
     }
     return new TextDecoder().decode(bytes);
+}
+
+/** Name the permission required by the rejected endpoint, never infer the token's actual grants. */
+function permissionFailure(method: Method, path: string): ErrorCode {
+    if (/^\/repos\/[^/]+\/[^/]+\/actions\/secrets(?:\/|$)/u.test(path)) {
+        return method === "GET" ? "secrets_read_forbidden" : "secrets_write_forbidden";
+    }
+    if (/^\/repos\/[^/]+\/[^/]+\/actions\//u.test(path)) {
+        return method === "GET" ? "actions_read_forbidden" : "actions_write_forbidden";
+    }
+    if (/^\/repos\/[^/]+\/[^/]+\/issues(?:[/?]|$)/u.test(path)) {
+        return method === "GET" ? "issues_read_forbidden" : "issues_write_forbidden";
+    }
+    if (method === "GET" && /^\/repos\/[^/]+\/[^/]+\/branches\//u.test(path)) {
+        return "contents_read_forbidden";
+    }
+    return "forbidden";
 }

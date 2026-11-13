@@ -5,6 +5,13 @@ export type ErrorCode =
     | "invalid_input"
     | "unauthenticated"
     | "forbidden"
+    | "actions_read_forbidden"
+    | "actions_write_forbidden"
+    | "issues_read_forbidden"
+    | "issues_write_forbidden"
+    | "secrets_read_forbidden"
+    | "secrets_write_forbidden"
+    | "contents_read_forbidden"
     | "not_found"
     | "conflict"
     | "rate_limited"
@@ -50,4 +57,18 @@ export function throwIfCancelled(signal: AbortSignal): void {
     if (signal.aborted) {
         throw new AppError("cancelled", { cause: signal.reason });
     }
+}
+
+/** Includes contextual GitHub denials while preserving the generic authorization error. */
+export function isAccessDenied(code: ErrorCode | null): boolean {
+    return (
+        code === "forbidden" ||
+        code === "actions_read_forbidden" ||
+        code === "actions_write_forbidden" ||
+        code === "issues_read_forbidden" ||
+        code === "issues_write_forbidden" ||
+        code === "secrets_read_forbidden" ||
+        code === "secrets_write_forbidden" ||
+        code === "contents_read_forbidden"
+    );
 }

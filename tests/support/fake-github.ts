@@ -19,6 +19,7 @@ export interface FakeUser {
 export interface TokenGrant {
     readonly user: FakeUser;
     readonly secrets: boolean;
+    readonly secretWrite?: boolean;
     readonly actions: boolean;
 }
 
@@ -278,7 +279,7 @@ export async function startFakeGitHub(options: {
                     : {},
             );
         } else if (secretPath !== undefined) {
-            if (!grant.secrets || field("key_id") !== "fake-key-1") {
+            if (!grant.secrets || grant.secretWrite === false || field("key_id") !== "fake-key-1") {
                 respond(request, response, 403, {});
                 return;
             }

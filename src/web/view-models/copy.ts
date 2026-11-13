@@ -14,8 +14,22 @@ export function errorMessage(code: ConnectionError): string {
             return "Check the repository name (owner/name) and paste the complete token.";
         case "unauthenticated":
             return "GitHub did not accept this token. It may have expired or been revoked; create a new one.";
+        case "actions_read_forbidden":
+            return "GitHub denied reading session status. This step requires repository permission Actions: Read. Set Actions to Read and write to also start and stop sessions.";
+        case "actions_write_forbidden":
+            return "GitHub denied starting or stopping a session. This step requires repository permission Actions: Read and write.";
+        case "issues_read_forbidden":
+            return "GitHub denied reading the encrypted session channel. This step requires repository permission Issues: Read. Set Issues to Read and write to also send session messages.";
+        case "issues_write_forbidden":
+            return "GitHub denied updating the encrypted session channel. This step requires repository permission Issues: Read and write.";
+        case "secrets_read_forbidden":
+            return "GitHub denied reading the repository secret encryption key. This step requires repository permission Secrets: Read. To complete account sharing, set Secrets to Read and write.";
+        case "secrets_write_forbidden":
+            return "GitHub denied saving the shared Claude account. This step requires repository permission Secrets: Read and write.";
+        case "contents_read_forbidden":
+            return "GitHub denied checking the default branch. This step requires repository permission Contents: Read.";
         case "forbidden":
-            return "Your token is missing a permission for this step. Check the permissions listed in the setup steps.";
+            return "GitHub denied this operation. Check the token's repository selection and required permissions, organization approval, and your account's repository access.";
         case "not_found":
             return "GitHub could not find this repository, or your token cannot see it. Check the name and the token's repository access.";
         case "conflict":

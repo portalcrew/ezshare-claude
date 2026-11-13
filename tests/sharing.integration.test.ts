@@ -1,4 +1,4 @@
-import { getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
+import { getByLabelText, getByRole, queryByRole, within } from "@testing-library/dom";
 import { afterEach, expect, test } from "vitest";
 import { SHARED_SECRET_NAME } from "../src/shared/protocol.ts";
 import { connect } from "./support/scenario.ts";
@@ -51,7 +51,15 @@ test("Given a member whose token cannot write secrets, When she starts sharing, 
     await app.user.click(getByRole(body, "button", { name: "I understand, start authorization" }));
 
     const alert = await app.eventually(() => getByRole(body, "alert"));
-    expect(alert.textContent).toContain("missing a permission");
+    expect(alert.textContent).toContain("Secrets: Read");
+    const warning = getByRole(body, "region", { name: "GitHub access needs attention" });
+    expect(warning.textContent).toContain("Secrets read and write");
+    const template = within(warning)
+        .getByRole("link", { name: /Create a replacement token/u })
+        .getAttribute("href");
+    expect(new URL(template ?? "").searchParams.get("secrets")).toBe("write");
+    await app.user.click(getByRole(body, "button", { name: "Use the team account" }));
+    expect(getByRole(body, "region", { name: "GitHub access needs attention" })).toBeTruthy();
     expect(app.github.runs).toEqual([]);
     expect(app.github.issues).toEqual([]);
 });
@@ -84,4 +92,27 @@ test("Given an unprotected default branch, When the owner opens sharing, Then sh
     expect(body.textContent).toContain("Authorization cancelled. Nothing was shared.");
     expect(app.github.runs[0]?.conclusion).toBe("cancelled");
     expect(queryByRole(body, "alert")).toBeNull();
+});
+
+test("Given a token that can read secret keys but cannot save secrets, When the owner completes authorization, Then the error names Secrets write permission and offers repair", async () => {
+    app = await createTestApp();
+    const body = document.body;
+    await openSharing(app, tokens.olivia);
+    await app.user.click(getByRole(body, "button", { name: "I understand, start authorization" }));
+    const code = await app.eventually(() => getByLabelText(body, "Authorization code"));
+    app.github.grant(tokens.olivia, {
+        user: { id: 103, login: "olivia", type: "User" },
+        secrets: true,
+        secretWrite: false,
+        actions: true,
+    });
+    await app.user.type(code, "owner-code-1234567890");
+    await app.user.click(getByRole(body, "button", { name: "Submit code" }));
+    await app.eventually(() => {
+        expect(getByRole(body, "region", { name: "GitHub access needs attention" }).textContent).toContain(
+            "Secrets: Read and write",
+        );
+    });
+    expect(getByRole(body, "button", { name: "Replace GitHub token" })).toBeTruthy();
+    expect(app.github.secret(SHARED_SECRET_NAME)).toBeNull();
 });
