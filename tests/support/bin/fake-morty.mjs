@@ -1,5 +1,5 @@
 // Controlled stand-in for npx executing the current Morty CLI: setup NDJSON output and stop.
-import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const invocation = process.argv.slice(2);
@@ -28,8 +28,23 @@ if (args[0] === "setup") {
         );
         process.exit(1);
     }
+    const state = process.env.MORTY_STATE_DIRECTORY;
+    mkdirSync(join(state, "computer", "sessions"), { recursive: true });
+    const identityFile = join(state, "config.json");
+    const identity = existsSync(identityFile)
+        ? JSON.parse(readFileSync(identityFile, "utf8"))
+        : { computerId: crypto.randomUUID(), computerE2EAccessSecret: "fake-private-computer-key" };
+    writeFileSync(identityFile, JSON.stringify(identity));
+    appendFileSync(
+        join(state, "computer", "sessions", "events.jsonl"),
+        `${JSON.stringify({ text: "turn via morty" })}\n`,
+    );
     // The member's conversation continues in the Claude session Morty attaches to; record that it was found.
-    const project = join(process.env.HOME, ".claude", "projects", value("--cwd").replaceAll(/[^A-Za-z0-9]/gu, "-"));
+    const project = join(
+        process.env.CLAUDE_CONFIG_DIR ?? join(process.env.HOME, ".claude"),
+        "projects",
+        value("--cwd").replaceAll(/[^A-Za-z0-9]/gu, "-"),
+    );
     const session = join(project, `${value("--session-id")}.jsonl`);
     if (!existsSync(session)) {
         console.error("fake morty: no such Claude session");
@@ -47,7 +62,7 @@ if (args[0] === "setup") {
         url.hash = new URLSearchParams({
             code: "private-transfer-code",
             workspace: value("--cwd"),
-            e2e: "opaque-morty-encryption-access",
+            e2e: Buffer.from(JSON.stringify(identity)).toString("base64url"),
         }).toString();
     }
     if (existsSync(join(process.env.HOME, ".morty-conflicting-handoff"))) {

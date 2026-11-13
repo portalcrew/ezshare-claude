@@ -48,6 +48,8 @@ export function errorMessage(code: ConnectionError): string {
             return "You already have a session running in this repository. End it before starting another.";
         case "storage_unavailable":
             return "This browser blocked local storage for the launcher. Allow site data and reload.";
+        case "history_key_missing":
+            return "The runner did not receive your personal history key. Keep this launcher open and start again. It did not create a new Computer or replace your saved history.";
         case "shared_account_missing":
             return "No Claude account has been shared with this repository yet. Ask the account owner to share one.";
         case "agent_failed":
@@ -222,7 +224,7 @@ export const chatCopy = {
     waiting: {
         beforeElapsed: "Waiting ",
         afterElapsed:
-            ". The first start usually takes two to four minutes. You can close this page; it picks up where you left off.",
+            ". The first start usually takes two to four minutes. Keep this launcher open until ready so it can unlock your personal state. You can close it after that.",
     },
     readyAnnouncement: "Your session is ready.",
     readyTitle: "Your session is ready",

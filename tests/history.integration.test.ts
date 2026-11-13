@@ -1,7 +1,8 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { IDBFactory } from "fake-indexeddb";
+import * as v from "valibot";
 import { afterEach, expect, test } from "vitest";
 import { connect } from "./support/scenario.ts";
 import { alice, bob, createTestApp, type TestApp, tokens } from "./support/test-app.ts";
@@ -11,6 +12,12 @@ afterEach(async () => {
     await app?.close();
     app = undefined;
 });
+
+function computer(url: URL): string {
+    const encoded = new URLSearchParams(url.hash.slice(1)).get("e2e");
+    const data: unknown = JSON.parse(Buffer.from(encoded ?? "", "base64url").toString("utf8"));
+    return v.parse(v.object({ computerId: v.string() }), data).computerId;
+}
 
 async function runSession(current: TestApp): Promise<{ readonly url: URL; readonly runId: number }> {
     const body = document.body;
@@ -55,6 +62,7 @@ test("Given a member ended a session, When she starts the next one, Then it cont
     expect([...app.actions.cache.keys()]).toEqual([`ezshare-history-${alice.id}-run-${first.runId}`]);
 
     const second = await runSession(app);
+    expect(computer(second.url)).toBe(computer(first.url));
     expect(getByRole(body, "main").textContent).toContain("Your previous conversation and workspace are restored");
     expect(second.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
     // The restored Claude session is attached directly; no new one is created.
@@ -62,6 +70,9 @@ test("Given a member ended a session, When she starts the next one, Then it cont
     const job = app.actions.jobs.get(second.runId);
     expect(await readFile(join(job?.agentHome ?? "", "workspace", "notes.txt"), "utf8")).toBe(
         "kept between sessions\nkept between sessions\n",
+    );
+    expect(await readFile(join(job?.agentHome ?? "", "morty", "computer", "sessions", "events.jsonl"), "utf8")).toBe(
+        '{"text":"turn via morty"}\n{"text":"turn via morty"}\n',
     );
     expect(await endSession(app)).toContain("Its history is saved");
     expect(app.actions.cache.size).toBe(2);
@@ -132,3 +143,53 @@ test.each(["modified ciphertext", "truncated tag"])(
         expect(app.actions.cache.size).toBe(2);
     },
 );
+
+test("Given an older archive without Morty identity, When the member continues twice, Then Claude history survives and the new Computer is retained after migration", async () => {
+    app = await createTestApp();
+    await connect(app, tokens.alice);
+    const first = await runSession(app);
+    const job = app.actions.jobs.get(first.runId);
+    if (job === undefined) {
+        throw new Error("Expected the first session job");
+    }
+    // Previous releases excluded this directory from the archived home.
+    await rm(join(job.agentHome, "morty"), { recursive: true, force: true });
+    await endSession(app);
+    const migrated = await runSession(app);
+    expect(migrated.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
+    expect(computer(migrated.url)).not.toBe(computer(first.url));
+    await endSession(app);
+    const continued = await runSession(app);
+    expect(computer(continued.url)).toBe(computer(migrated.url));
+    expect(continued.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
+});
+
+test("Given the launcher closes before unlocking history, When the key deadline expires, Then no new Computer is created and reopening explains how to retry", async () => {
+    app = await createTestApp();
+    const body = document.body;
+    app.actions.holdQueue();
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    await app.eventually(() => getByRole(body, "button", { name: "Cancel" }));
+    app.suspend();
+    app.actions.release();
+    const job = await app.eventually(() => {
+        const current = [...(app?.actions.jobs.values() ?? [])][0];
+        if (
+            current === undefined ||
+            !current.diagnostics.some(
+                (record) => record.event === "session.stage" && record.stage === "awaiting_history",
+            )
+        ) {
+            throw new Error("Expected the runner to wait for its browser key");
+        }
+        return current;
+    });
+    app.clock.advance(5 * 60_000);
+    await app.eventually(() => expect(job.error).toBe("history_key_missing"));
+    expect(app.actions.cache.size).toBe(0);
+    expect((await app.actions.agentLog(job.run.id)).some((entry) => entry.command === "setup")).toBe(false);
+    app.reload();
+    const alert = await app.eventually(() => getByRole(body, "alert"));
+    expect(alert.textContent).toContain("Keep this launcher open");
+});

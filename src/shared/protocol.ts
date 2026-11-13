@@ -139,6 +139,7 @@ export const runnerFailureSchema = v.strictObject({
         "timeout",
         "unsafe_execution",
         "shared_account_missing",
+        "history_key_missing",
         "agent_failed",
         "morty_unavailable",
         "provider_failed",

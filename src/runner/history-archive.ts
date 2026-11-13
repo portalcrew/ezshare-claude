@@ -30,8 +30,16 @@ const MAX_MANIFEST_BYTES = 4096;
 /** Watchdog for one streamed agent command (tar, ls), so a hung process cannot block the session. */
 const STREAM_TIMEOUT_MS = 5 * 60_000;
 
-/** The parts of the agent's home that never travel: credentials, caches, and Morty's device identity. */
-const EXCLUDED = ["./.claude/.credentials.json", "./.cache", "./.npm", "./morty", "node_modules"] as const;
+/** Morty's identity and session data are personal encrypted state; shared credentials and process caches are not. */
+const EXCLUDED = [
+    "./.claude/.credentials.json",
+    "./.cache",
+    "./.npm",
+    "./morty/computer/daemon.lock*",
+    "./morty/*.lock.sqlite*",
+    "./morty/computer/logs",
+    "node_modules",
+] as const;
 
 const manifestSchema = v.strictObject({ version: v.literal(1), sessionId: requestIdSchema });
 

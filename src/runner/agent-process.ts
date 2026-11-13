@@ -49,6 +49,8 @@ export async function agentCommand(
             // own unreadable home. Set after sudo, so tools such as gh, git and pnpm keep their configuration in the
             // agent's home, which travels with the member's history.
             `XDG_CONFIG_HOME=${join(account.home, ".config")}`,
+            // Claude and Morty's Claude adapter must read the same transcript store that history archives.
+            `CLAUDE_CONFIG_DIR=${join(account.home, ".claude")}`,
             executable,
             ...args,
         ],

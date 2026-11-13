@@ -65,33 +65,32 @@ export async function runChat(
                         if (request.kind === "stop") {
                             return;
                         }
-                        let start: HistoryStart = "off";
+                        let start: HistoryStart;
                         let restoredSession: string | null = null;
-                        if (request.kind === "history") {
-                            ports.diagnostics({ event: "session.stage", stage: "restoring_history" });
-                            const restored =
-                                request.mode === "replace"
-                                    ? ({ kind: "none" } as const)
-                                    : await restoreHistory(archive, request.key, owner, context.agent, path, bounded);
-                            switch (restored.kind) {
-                                case "none":
-                                    start = "new";
-                                    break;
-                                case "unreadable":
-                                    start = "unreadable";
-                                    break;
-                                case "restored":
-                                    start = "restored";
-                                    restoredSession = restored.sessionId;
-                                    break;
-                                default:
-                                    return restored satisfies never;
-                            }
+                        ports.diagnostics({ event: "session.stage", stage: "restoring_history" });
+                        const restored =
+                            request.mode === "replace"
+                                ? ({ kind: "none" } as const)
+                                : await restoreHistory(archive, request.key, owner, context.agent, path, bounded);
+                        switch (restored.kind) {
+                            case "none":
+                                start = "new";
+                                break;
+                            case "unreadable":
+                                start = "unreadable";
+                                break;
+                            case "restored":
+                                start = "restored";
+                                restoredSession = restored.sessionId;
+                                break;
+                            default:
+                                return restored satisfies never;
                         }
                         ports.diagnostics({ event: "session.stage", stage: "starting_agent" });
-                        // A restored conversation already has its Claude session; only a new one needs creating.
                         const sessionId = restoredSession ?? (await agent.startClaude(bounded));
-                        if (request.kind === "history" && start !== "unreadable") {
+                        await agent.verifyClaudeSession(sessionId, bounded);
+                        ports.diagnostics({ event: "session.stage", stage: "verified_history" });
+                        if (start !== "unreadable") {
                             saving = { key: request.key, sessionId };
                         }
                         ports.diagnostics({ event: "session.stage", stage: "connecting_morty" });
@@ -124,19 +123,15 @@ const HISTORY_POLL_MS = 3_000;
 const SAVE_TIMEOUT_MS = 6 * 60_000;
 
 /**
- * Waits for the member's browser to hand over the history key. A browser that stays away (the launcher page was
- * closed while the run started) leaves this session without history rather than blocking it.
+ * Waits for the browser's personal key before starting any Agent or Computer. A missing key must never silently
+ * turn a continuing session into a new identity with empty history.
  */
 async function waitForHistory(
     channel: ChatRunnerChannel,
     deadline: number,
     ports: RunnerPorts,
     signal: AbortSignal,
-): Promise<
-    | { readonly kind: "history"; readonly key: string; readonly mode: HistoryMode }
-    | { readonly kind: "stop" }
-    | { readonly kind: "absent" }
-> {
+): Promise<{ readonly kind: "history"; readonly key: string; readonly mode: HistoryMode } | { readonly kind: "stop" }> {
     const until = Math.min(deadline, ports.clock.now() + HISTORY_WAIT_MS);
     for (;;) {
         const messages = await channel.receive(signal);
@@ -149,7 +144,7 @@ async function waitForHistory(
             return { kind: "history", key: history.body.key, mode: history.body.mode };
         }
         if (ports.clock.now() >= until) {
-            return { kind: "absent" };
+            throw new AppError("history_key_missing");
         }
         await ports.clock.sleep(Math.min(HISTORY_POLL_MS, until - ports.clock.now()), signal);
     }
@@ -274,6 +269,21 @@ class AgentSession {
             throw new AppError("agent_failed");
         }
         return sessionId;
+    };
+
+    /** Verify the archived native transcript before handing its session id to Morty. */
+    readonly verifyClaudeSession = async (sessionId: string, signal: AbortSignal): Promise<void> => {
+        await runAgentCommand(
+            await agentCommand(
+                this.#context.agent,
+                this.#path,
+                this.#workspace,
+                "test",
+                ["-s", join(this.#context.agent.home, claudeProject(this.#workspace), `${sessionId}.jsonl`)],
+                this.#variables,
+            ),
+            { timeout: 10_000, failure: "agent_failed", signal },
+        );
     };
 
     readonly connectMorty = async (

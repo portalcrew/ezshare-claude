@@ -41,7 +41,11 @@ if (args[0] === "-p") {
         process.exit(1);
     }
     // Like the real CLI, the session is a JSONL file in the project directory named after the working directory.
-    const project = join(process.env.HOME, ".claude", "projects", process.cwd().replaceAll(/[^A-Za-z0-9]/gu, "-"));
+    const project = join(
+        process.env.CLAUDE_CONFIG_DIR ?? join(process.env.HOME, ".claude"),
+        "projects",
+        process.cwd().replaceAll(/[^A-Za-z0-9]/gu, "-"),
+    );
     mkdirSync(project, { recursive: true });
     appendFileSync(
         join(project, `${value("--session-id")}.jsonl`),
