@@ -27,6 +27,7 @@ export type DiagnosticRecord =
               | "starting_agent"
               | "connecting_morty"
               | "ready"
+              | "idle"
               | "awaiting_authorization"
               | "completing_authorization"
               | "authorized"

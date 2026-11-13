@@ -15,10 +15,12 @@ import {
 import { agentCommand, runAgentCommand } from "./agent-process.ts";
 import { type ActionsContext, agentWorkspace, historyArchivePath, type StepEnvironment } from "./context.ts";
 import { type Diagnostics, MORTY_ERROR_CODES } from "./diagnostics.ts";
-import { type HistoryOwner, latestSessionId, restoreHistory, saveHistory } from "./history-archive.ts";
+import { claudeProject, type HistoryOwner, latestSessionId, restoreHistory, saveHistory } from "./history-archive.ts";
 import { type ChatRunnerChannel, createChatChannel, type RunnerPorts, runSession } from "./session.ts";
 
 const STOP_POLL_MS = 15_000;
+/** A ready session with no new Claude turn for this long ends early and frees its runner. */
+const IDLE_STOP_MS = 15 * 60_000;
 
 const mortyReadySchema = v.object({
     status: v.literal("ready"),
@@ -94,7 +96,7 @@ export async function runChat(
                     const ready = await agent.connectMorty(sessionId, bounded);
                     await channel.send({ kind: "ready", body: { ...ready, history: start } }, bounded);
                     ports.diagnostics({ event: "session.stage", stage: "ready" });
-                    await waitForStop(channel, deadline, ports, bounded);
+                    await waitForStop(channel, deadline, ports, agent.activity, bounded);
                 });
             } catch (cause) {
                 // Reaching the session's lifetime is its normal end, not a failure.
@@ -177,18 +179,37 @@ async function archiveHistory(
     }
 }
 
+/**
+ * Waits until the member asks to stop, the lifetime ends, or the conversation has been idle for `IDLE_STOP_MS`.
+ * `activity` fingerprints the Claude transcripts; a changed fingerprint is a new turn. An unreadable fingerprint
+ * counts as activity, so a probe failure can never end a session early.
+ */
 async function waitForStop(
     channel: ChatRunnerChannel,
     deadline: number,
     ports: RunnerPorts,
+    activity: (signal: AbortSignal) => Promise<string | null>,
     signal: AbortSignal,
 ): Promise<void> {
+    let fingerprint = await activity(signal);
+    let lastActive = ports.clock.now();
     while (ports.clock.now() < deadline) {
         const messages = await channel.receive(signal);
         if (messages.some((message) => message.kind === "stop")) {
             return;
         }
-        await ports.clock.sleep(Math.min(STOP_POLL_MS, deadline - ports.clock.now()), signal);
+        const current = await activity(signal);
+        const now = ports.clock.now();
+        if (current === null || current !== fingerprint) {
+            fingerprint = current;
+            lastActive = now;
+        }
+        const idleUntil = lastActive + IDLE_STOP_MS;
+        if (now >= idleUntil) {
+            ports.diagnostics({ event: "session.stage", stage: "idle" });
+            return;
+        }
+        await ports.clock.sleep(Math.min(STOP_POLL_MS, deadline - now, idleUntil - now), signal);
     }
 }
 
@@ -273,8 +294,9 @@ class AgentSession {
                     "claude",
                     "--session-id",
                     sessionId,
+                    // Morty offers 1h, 1d, 7d or 30d; the session itself ends within its lifetime.
                     "--device-access",
-                    "1h",
+                    "1d",
                 ],
                 this.#variables,
             ),
@@ -321,6 +343,39 @@ class AgentSession {
         }
         this.#diagnostics({ event: "morty.failed", code: "READY_OUTPUT_INVALID", exitCode: 0 });
         throw new AppError("morty_unavailable");
+    };
+
+    /** Names, sizes and modification times of the Claude transcripts, or null if they cannot be listed. */
+    readonly activity = async (signal: AbortSignal): Promise<string | null> => {
+        try {
+            const output = await runAgentCommand(
+                await agentCommand(
+                    this.#context.agent,
+                    this.#path,
+                    this.#context.agent.home,
+                    "find",
+                    [
+                        claudeProject(this.#workspace),
+                        "-maxdepth",
+                        "1",
+                        "-type",
+                        "f",
+                        "-name",
+                        "*.jsonl",
+                        "-printf",
+                        "%f %s %T@\\n",
+                    ],
+                    {},
+                ),
+                { timeout: 15_000, failure: "agent_failed", signal },
+            );
+            return output.split("\n").sort().join("\n");
+        } catch (cause) {
+            if (signal.aborted) {
+                throw cause;
+            }
+            return null;
+        }
     };
 
     readonly stopMorty = async (): Promise<void> => {

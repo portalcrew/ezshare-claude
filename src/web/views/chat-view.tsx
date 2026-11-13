@@ -57,9 +57,10 @@ export function ChatView({
                                 />
                                 {phase.outcome !== null && <OutcomeNotice outcome={phase.outcome} />}
                                 <p className="text-sm">
-                                    Start a private Claude session that uses the team account. A session lasts up to one
-                                    hour. When it ends, your conversation and workspace are encrypted with a key that
-                                    only this browser keeps, and the next session continues from them.
+                                    Start a private Claude session that uses the team account. A session lasts up to
+                                    four hours and ends early after 15 minutes without a message. When it ends, your
+                                    conversation and workspace are encrypted with a key that only this browser keeps,
+                                    and the next session continues from them.
                                 </p>
                                 {replacingHistory && (
                                     <Notice tone="info">
@@ -146,8 +147,8 @@ export function ChatView({
                                 </ExternalLink>
                                 <p className="text-sm text-stone-600 dark:text-stone-400">
                                     Anyone with this link can use your session until it ends, so do not share it. The
-                                    session ends after one hour. End it here when you are done, so your history is
-                                    saved.
+                                    session ends after four hours, or after 15 minutes without a message. End it here
+                                    when you are done, so your history is saved.
                                 </p>
                                 <Button variant="danger" busy={command === "stop"} onClick={actions.stop}>
                                     End session
