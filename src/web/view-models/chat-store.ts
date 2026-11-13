@@ -1,4 +1,5 @@
 import { createStore } from "zustand/vanilla";
+import type { SessionChannel } from "../../shared/channel.ts";
 import { AppError, type ErrorCode } from "../../shared/errors.ts";
 import type { WorkflowRun } from "../../shared/github/client.ts";
 import {
@@ -28,6 +29,7 @@ const POLL_IDLE_MS = 30_000;
 const POLL_PROBLEM_MS = 15_000;
 
 const schemas = { outbound: chatBrowserMessageSchema, inbound: chatRunnerMessageSchema };
+type ChatChannel = SessionChannel<typeof chatBrowserMessageSchema, typeof chatRunnerMessageSchema>;
 
 /** How the member's previous session ended, shown until the next one starts. */
 export type ChatOutcome =
@@ -46,7 +48,6 @@ export type ChatPhase =
           readonly kind: "ready";
           readonly session: PendingSession;
           readonly url: string;
-          readonly accessExpiresAt: string;
           readonly history: HistoryStart;
       }
     | { readonly kind: "stopping"; readonly session: PendingSession; readonly forced: boolean };
@@ -87,23 +88,62 @@ export function createChatStore(member: MemberContext) {
     const keyed = new Set<string>();
 
     return createStore<ChatState & ChatActions>()((set, get) => {
-        const observe = async (session: PendingSession, signal: AbortSignal): Promise<ChatPhase> => {
+        /** The session is over for this page: forget its key and show how it ended. */
+        const finish = async (session: PendingSession, outcome: ChatOutcome): Promise<ChatPhase> => {
+            await abandonSession(member, session);
+            return { kind: "idle", outcome };
+        };
+
+        /** The runner reported its end: keep a saved history for the next session, then finish. */
+        const finishReported = async (
+            session: PendingSession,
+            outcome: ChatOutcome,
+            stillRunning: string | null,
+            signal: AbortSignal,
+        ): Promise<ChatPhase> => {
+            ending = stillRunning;
+            keyed.delete(session.requestId);
+            if (outcome.kind === "stopped" && outcome.history === "archived") {
+                await member.vault.setHistoryMode(member.repository.name, member.user.id, "continue", signal);
+            }
+            return finish(session, outcome);
+        };
+
+        /** Sends this browser's history key to a running session once, until it reports ready. */
+        const handOverHistoryKey = async (
+            session: PendingSession,
+            channel: ChatChannel,
+            messages: readonly ChatRunnerMessage[],
+            signal: AbortSignal,
+        ): Promise<void> => {
+            if (keyed.has(session.requestId) || messages.some((message) => message.kind === "ready")) {
+                return;
+            }
+            const history = await member.vault.history(member.repository.name, member.user.id, signal);
+            const message: ChatBrowserMessage = { kind: "history", body: history };
+            await channel.send(message, signal);
+            keyed.add(session.requestId);
+        };
+
+        /**
+         * Moves a pending session one step forward and returns the phase to show. Besides reading the run, this
+         * acts on what it finds: it carries out a cancel requested before the run was visible, hands over the
+         * history key, and finishes a session that ended.
+         */
+        const advance = async (session: PendingSession, signal: AbortSignal): Promise<ChatPhase> => {
             if (sessionExpired(member, session)) {
-                await abandonSession(member, session);
-                return { kind: "idle", outcome: { kind: "expired" } };
+                return finish(session, { kind: "expired" });
             }
             const observation = await observeSession(member, session, schemas, signal);
             const current = get().phase;
             const stopping = current.kind === "stopping" ? current : null;
-            // A cancel requested before the run was visible is carried out as soon as it is.
             if (stopping?.forced === true && (observation.kind === "queued" || observation.kind === "running")) {
                 await member.github.cancelRun(member.repository.name, observation.run.id, signal);
             }
             switch (observation.kind) {
                 case "not_started":
                     if (observation.overdue) {
-                        await abandonSession(member, session);
-                        return { kind: "idle", outcome: { kind: "failed", code: "github_unavailable" } };
+                        return finish(session, { kind: "failed", code: "github_unavailable" });
                     }
                     return stopping ?? { kind: "queued", session };
                 case "queued":
@@ -113,45 +153,13 @@ export function createChatStore(member: MemberContext) {
                     const messages = observation.channel === null ? [] : await observation.channel.receive(signal);
                     const outcome = outcomeOf(messages, observation.kind === "finished");
                     if (outcome !== null) {
-                        ending = observation.kind === "running" ? observation.run.id : null;
-                        keyed.delete(session.requestId);
-                        if (outcome.kind === "stopped" && outcome.history === "archived") {
-                            await member.vault.setHistoryMode(
-                                member.repository.name,
-                                member.user.id,
-                                "continue",
-                                signal,
-                            );
-                        }
-                        await abandonSession(member, session);
-                        return { kind: "idle", outcome };
+                        const stillRunning = observation.kind === "running" ? observation.run.id : null;
+                        return finishReported(session, outcome, stillRunning, signal);
                     }
-                    if (
-                        observation.kind === "running" &&
-                        observation.channel !== null &&
-                        stopping === null &&
-                        !keyed.has(session.requestId) &&
-                        !messages.some((message) => message.kind === "ready")
-                    ) {
-                        const history = await member.vault.history(member.repository.name, member.user.id, signal);
-                        const message: ChatBrowserMessage = { kind: "history", body: history };
-                        await observation.channel.send(message, signal);
-                        keyed.add(session.requestId);
+                    if (observation.kind === "running" && observation.channel !== null && stopping === null) {
+                        await handOverHistoryKey(session, observation.channel, messages, signal);
                     }
-                    if (stopping !== null) {
-                        return stopping;
-                    }
-                    const ready = messages.findLast((message) => message.kind === "ready");
-                    if (ready !== undefined) {
-                        return {
-                            kind: "ready",
-                            session,
-                            url: mortyUrl(ready.body.url),
-                            accessExpiresAt: ready.body.accessExpiresAt,
-                            history: ready.body.history,
-                        };
-                    }
-                    return { kind: "preparing", session };
+                    return stopping ?? progressOf(session, messages);
                 }
                 default:
                     return observation satisfies never;
@@ -169,7 +177,7 @@ export function createChatStore(member: MemberContext) {
                         member.user.id,
                         signal,
                     );
-                    next = saved === null ? await idleOrBusy(null, signal) : await observe(saved, signal);
+                    next = saved === null ? await idleOrBusy(null, signal) : await advance(saved, signal);
                     break;
                 }
                 case "idle":
@@ -182,7 +190,7 @@ export function createChatStore(member: MemberContext) {
                 case "preparing":
                 case "ready":
                 case "stopping":
-                    next = await observe(phase.session, signal);
+                    next = await advance(phase.session, signal);
                     if (next.kind === "idle") {
                         next = await idleOrBusy(next.outcome, signal);
                     }
@@ -297,6 +305,14 @@ export function createChatStore(member: MemberContext) {
                 }),
         };
     });
+}
+
+/** A running session is ready once the runner sent its chat link; until then it is preparing. */
+function progressOf(session: PendingSession, messages: readonly ChatRunnerMessage[]): ChatPhase {
+    const ready = messages.findLast((message) => message.kind === "ready");
+    return ready === undefined
+        ? { kind: "preparing", session }
+        : { kind: "ready", session, url: mortyUrl(ready.body.url), history: ready.body.history };
 }
 
 function outcomeOf(
