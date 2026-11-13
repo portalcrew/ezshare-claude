@@ -7,7 +7,7 @@ import { createInterface } from "node:readline";
 const args = process.argv.slice(2);
 appendFileSync(
     `${process.env.HOME ?? "/nonexistent"}.agent-env.jsonl`,
-    `${JSON.stringify({ program: "claude", command: args[0], names: Object.keys(process.env).sort() })}\n`,
+    `${JSON.stringify({ program: "claude", command: args[0], names: Object.keys(process.env).sort(), configHome: process.env.XDG_CONFIG_HOME ?? null })}\n`,
 );
 const value = (name) => args[args.indexOf(name) + 1];
 
