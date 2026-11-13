@@ -1,5 +1,5 @@
 import { withDeadline } from "../async.ts";
-import { AppError, throwIfCancelled } from "../errors.ts";
+import { type AccessDeniedCode, AppError, throwIfCancelled } from "../errors.ts";
 import { parseJson } from "../protocol.ts";
 
 export const GITHUB_API_ORIGIN = "https://api.github.com";
@@ -48,23 +48,36 @@ export class GitHubHttp {
         this.#origin = apiOrigin(origin);
     }
 
-    readonly get = (path: string, signal: AbortSignal): Promise<unknown> =>
-        this.#request("GET", path, undefined, signal);
+    readonly get = (path: string, signal: AbortSignal, denial: AccessDeniedCode): Promise<unknown> =>
+        this.#request("GET", path, undefined, signal, denial);
 
-    readonly post = (path: string, body: Readonly<Record<string, unknown>>, signal: AbortSignal): Promise<unknown> =>
-        this.#request("POST", path, body, signal);
+    readonly post = (
+        path: string,
+        body: Readonly<Record<string, unknown>>,
+        signal: AbortSignal,
+        denial: AccessDeniedCode,
+    ): Promise<unknown> => this.#request("POST", path, body, signal, denial);
 
-    readonly put = (path: string, body: Readonly<Record<string, unknown>>, signal: AbortSignal): Promise<unknown> =>
-        this.#request("PUT", path, body, signal);
+    readonly put = (
+        path: string,
+        body: Readonly<Record<string, unknown>>,
+        signal: AbortSignal,
+        denial: AccessDeniedCode,
+    ): Promise<unknown> => this.#request("PUT", path, body, signal, denial);
 
-    readonly patch = (path: string, body: Readonly<Record<string, unknown>>, signal: AbortSignal): Promise<unknown> =>
-        this.#request("PATCH", path, body, signal);
+    readonly patch = (
+        path: string,
+        body: Readonly<Record<string, unknown>>,
+        signal: AbortSignal,
+        denial: AccessDeniedCode,
+    ): Promise<unknown> => this.#request("PATCH", path, body, signal, denial);
 
     readonly #request = async (
         method: Method,
         path: string,
         body: Readonly<Record<string, unknown>> | undefined,
         signal: AbortSignal,
+        denial: AccessDeniedCode,
     ): Promise<unknown> => {
         throwIfCancelled(signal);
         if (!path.startsWith("/") || path.startsWith("//")) {
@@ -96,7 +109,7 @@ export class GitHubHttp {
                 }
                 if (!response.ok) {
                     await response.body?.cancel();
-                    throw failure(response);
+                    throw failure(response, denial);
                 }
                 if (response.status === 201 || response.status === 202 || response.status === 204) {
                     const text = await readBounded(response);
@@ -118,14 +131,14 @@ export class GitHubHttp {
     };
 }
 
-function failure(response: Response): AppError {
+function failure(response: Response, denial: AccessDeniedCode): AppError {
     switch (response.status) {
         case 401:
             return new AppError("unauthenticated");
         case 403:
             return response.headers.get("x-ratelimit-remaining") === "0"
                 ? new AppError("rate_limited")
-                : new AppError("forbidden");
+                : new AppError(denial);
         case 404:
             return new AppError("not_found");
         case 409:

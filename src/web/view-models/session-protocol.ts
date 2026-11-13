@@ -2,7 +2,7 @@ import type * as v from "valibot";
 import type { Clock } from "../../shared/async.ts";
 import { SessionChannel } from "../../shared/channel.ts";
 import { createChannelKey, deriveChannelKeys } from "../../shared/channel-crypto.ts";
-import { AppError, toAppError } from "../../shared/errors.ts";
+import { AppError, isAccessDenied, toAppError } from "../../shared/errors.ts";
 import type { GitHubClient, GitHubUser, Repository, WorkflowRun } from "../../shared/github/client.ts";
 import { ISSUE_BODY, issueTitle, lifetime, type Purpose, publishedRunnerKey } from "../../shared/protocol.ts";
 import { findSessionRun } from "../../shared/session-run.ts";
@@ -57,7 +57,7 @@ export async function beginSession(
     } catch (cause) {
         const error = toAppError(cause);
         // GitHub rejected the dispatch outright: nothing will run, so undo the preparation.
-        if (["unauthenticated", "forbidden", "not_found", "conflict"].includes(error.code)) {
+        if (isAccessDenied(error.code) || ["unauthenticated", "not_found", "conflict"].includes(error.code)) {
             await abandonSession(member, session);
             throw error;
         }

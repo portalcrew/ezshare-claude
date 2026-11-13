@@ -1,7 +1,7 @@
-import { getByLabelText, getByRole, getByText, queryByRole } from "@testing-library/dom";
+import { getByLabelText, getByRole, getByText, queryByRole, within } from "@testing-library/dom";
 import { afterEach, expect, test } from "vitest";
 import { connect } from "./support/scenario.ts";
-import { createTestApp, REPOSITORY, type TestApp, tokens } from "./support/test-app.ts";
+import { alice, createTestApp, REPOSITORY, type TestApp, tokens } from "./support/test-app.ts";
 
 let app: TestApp | undefined;
 afterEach(async () => {
@@ -66,4 +66,24 @@ test("Given a fork configured with its own execution repository, When a member o
     await app.user.click(getByRole(body, "button", { name: "Connect" }));
     await app.eventually(() => getByRole(body, "button", { name: "Start a session" }));
     expect(getByRole(body, "main").textContent).toContain(REPOSITORY);
+});
+
+test("Given a token that can identify a member but cannot dispatch workflows, When starting a session is denied, Then a persistent connection warning offers token replacement", async () => {
+    app = await createTestApp();
+    app.github.grant(tokens.alice, { user: alice, secrets: false, actions: false });
+    const body = document.body;
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    const warning = await app.eventually(() => getByRole(body, "region", { name: "GitHub access needs attention" }));
+    expect(warning.textContent).toContain("Actions and Issues");
+    expect(getByRole(body, "alert").textContent).toContain("Actions: Read and write");
+    expect(warning.textContent).toContain(REPOSITORY);
+    await app.user.click(getByRole(body, "button", { name: "Share your account" }));
+    expect(getByRole(body, "region", { name: "GitHub access needs attention" })).toBeTruthy();
+    await app.user.click(within(warning).getByRole("button", { name: "Replace GitHub token" }));
+    await app.eventually(() => getByLabelText(body, "GitHub token"));
+    app.reload();
+    await app.eventually(() => getByLabelText(body, "GitHub token"));
+    expect(queryByRole(body, "button", { name: "Disconnect" })).toBeNull();
+    expect(app.github.runs).toEqual([]);
 });
