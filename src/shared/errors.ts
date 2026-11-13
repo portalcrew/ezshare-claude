@@ -1,9 +1,5 @@
-/** Stable machine-readable failure codes shared by the browser and the Actions runner. */
-export type ErrorCode =
-    | "cancelled"
-    | "timeout"
-    | "invalid_input"
-    | "unauthenticated"
+/** Authorization errors chosen by the GitHub operation that knows its required permission. */
+export type AccessDeniedCode =
     | "forbidden"
     | "actions_read_forbidden"
     | "actions_write_forbidden"
@@ -11,7 +7,15 @@ export type ErrorCode =
     | "issues_write_forbidden"
     | "secrets_read_forbidden"
     | "secrets_write_forbidden"
-    | "contents_read_forbidden"
+    | "contents_read_forbidden";
+
+/** Stable machine-readable failure codes shared by the browser and the Actions runner. */
+export type ErrorCode =
+    | "cancelled"
+    | "timeout"
+    | "invalid_input"
+    | "unauthenticated"
+    | AccessDeniedCode
     | "not_found"
     | "conflict"
     | "rate_limited"

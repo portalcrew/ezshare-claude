@@ -1,5 +1,5 @@
 import { withDeadline } from "../async.ts";
-import { AppError, type ErrorCode, throwIfCancelled } from "../errors.ts";
+import { type AccessDeniedCode, AppError, throwIfCancelled } from "../errors.ts";
 import { parseJson } from "../protocol.ts";
 
 export const GITHUB_API_ORIGIN = "https://api.github.com";
@@ -48,23 +48,36 @@ export class GitHubHttp {
         this.#origin = apiOrigin(origin);
     }
 
-    readonly get = (path: string, signal: AbortSignal): Promise<unknown> =>
-        this.#request("GET", path, undefined, signal);
+    readonly get = (path: string, signal: AbortSignal, denial: AccessDeniedCode): Promise<unknown> =>
+        this.#request("GET", path, undefined, signal, denial);
 
-    readonly post = (path: string, body: Readonly<Record<string, unknown>>, signal: AbortSignal): Promise<unknown> =>
-        this.#request("POST", path, body, signal);
+    readonly post = (
+        path: string,
+        body: Readonly<Record<string, unknown>>,
+        signal: AbortSignal,
+        denial: AccessDeniedCode,
+    ): Promise<unknown> => this.#request("POST", path, body, signal, denial);
 
-    readonly put = (path: string, body: Readonly<Record<string, unknown>>, signal: AbortSignal): Promise<unknown> =>
-        this.#request("PUT", path, body, signal);
+    readonly put = (
+        path: string,
+        body: Readonly<Record<string, unknown>>,
+        signal: AbortSignal,
+        denial: AccessDeniedCode,
+    ): Promise<unknown> => this.#request("PUT", path, body, signal, denial);
 
-    readonly patch = (path: string, body: Readonly<Record<string, unknown>>, signal: AbortSignal): Promise<unknown> =>
-        this.#request("PATCH", path, body, signal);
+    readonly patch = (
+        path: string,
+        body: Readonly<Record<string, unknown>>,
+        signal: AbortSignal,
+        denial: AccessDeniedCode,
+    ): Promise<unknown> => this.#request("PATCH", path, body, signal, denial);
 
     readonly #request = async (
         method: Method,
         path: string,
         body: Readonly<Record<string, unknown>> | undefined,
         signal: AbortSignal,
+        denial: AccessDeniedCode,
     ): Promise<unknown> => {
         throwIfCancelled(signal);
         if (!path.startsWith("/") || path.startsWith("//")) {
@@ -96,7 +109,7 @@ export class GitHubHttp {
                 }
                 if (!response.ok) {
                     await response.body?.cancel();
-                    throw failure(response, method, path);
+                    throw failure(response, denial);
                 }
                 if (response.status === 201 || response.status === 202 || response.status === 204) {
                     const text = await readBounded(response);
@@ -118,14 +131,14 @@ export class GitHubHttp {
     };
 }
 
-function failure(response: Response, method: Method, path: string): AppError {
+function failure(response: Response, denial: AccessDeniedCode): AppError {
     switch (response.status) {
         case 401:
             return new AppError("unauthenticated");
         case 403:
             return response.headers.get("x-ratelimit-remaining") === "0"
                 ? new AppError("rate_limited")
-                : new AppError(permissionFailure(method, path));
+                : new AppError(denial);
         case 404:
             return new AppError("not_found");
         case 409:
@@ -168,21 +181,4 @@ async function readBounded(response: Response): Promise<string> {
         offset += chunk.byteLength;
     }
     return new TextDecoder().decode(bytes);
-}
-
-/** Name the permission required by the rejected endpoint, never infer the token's actual grants. */
-function permissionFailure(method: Method, path: string): ErrorCode {
-    if (/^\/repos\/[^/]+\/[^/]+\/actions\/secrets(?:\/|$)/u.test(path)) {
-        return method === "GET" ? "secrets_read_forbidden" : "secrets_write_forbidden";
-    }
-    if (/^\/repos\/[^/]+\/[^/]+\/actions\//u.test(path)) {
-        return method === "GET" ? "actions_read_forbidden" : "actions_write_forbidden";
-    }
-    if (/^\/repos\/[^/]+\/[^/]+\/issues(?:[/?]|$)/u.test(path)) {
-        return method === "GET" ? "issues_read_forbidden" : "issues_write_forbidden";
-    }
-    if (method === "GET" && /^\/repos\/[^/]+\/[^/]+\/branches\//u.test(path)) {
-        return "contents_read_forbidden";
-    }
-    return "forbidden";
 }

@@ -135,13 +135,13 @@ export class GitHubClient {
     }
 
     readonly user = async (signal: AbortSignal): Promise<GitHubUser> => {
-        const user = decode(userSchema, await this.#http.get("/user", signal));
+        const user = decode(userSchema, await this.#http.get("/user", signal, "forbidden"));
         return { id: String(user.id), login: user.login };
     };
 
     readonly repository = async (repository: string, signal: AbortSignal): Promise<Repository> => {
         const name = repositoryName(repository);
-        const found = decode(repositorySchema, await this.#http.get(`/repos/${name}`, signal));
+        const found = decode(repositorySchema, await this.#http.get(`/repos/${name}`, signal, "forbidden"));
         if (found.full_name.toLowerCase() !== name) {
             throw new AppError("invalid_response");
         }
@@ -150,8 +150,10 @@ export class GitHubClient {
 
     readonly branchProtected = async (repository: Repository, signal: AbortSignal): Promise<boolean> => {
         const branch = encodeURIComponent(repository.defaultBranch);
-        return decode(branchSchema, await this.#http.get(`/repos/${repository.name}/branches/${branch}`, signal))
-            .protected;
+        return decode(
+            branchSchema,
+            await this.#http.get(`/repos/${repository.name}/branches/${branch}`, signal, "contents_read_forbidden"),
+        ).protected;
     };
 
     /** Every unfinished session run the member dispatched in the repository. */
@@ -171,7 +173,10 @@ export class GitHubClient {
                     per_page: String(PAGE_SIZE),
                     page: String(page),
                 });
-                const runs = decode(runsSchema, await this.#http.get(`/repos/${name}/actions/runs?${query}`, signal));
+                const runs = decode(
+                    runsSchema,
+                    await this.#http.get(`/repos/${name}/actions/runs?${query}`, signal, "actions_read_forbidden"),
+                );
                 for (const run of runs.workflow_runs.map(toRun)) {
                     if (
                         run.actorId === user.id &&
@@ -203,7 +208,11 @@ export class GitHubClient {
         const query = new URLSearchParams({ actor: user.login, event: "workflow_dispatch", per_page: "30" });
         const runs = decode(
             runsSchema,
-            await this.#http.get(`/repos/${name}/actions/workflows/${purpose}.yml/runs?${query}`, signal),
+            await this.#http.get(
+                `/repos/${name}/actions/workflows/${purpose}.yml/runs?${query}`,
+                signal,
+                "actions_read_forbidden",
+            ),
         );
         return runs.workflow_runs
             .map(toRun)
@@ -215,7 +224,12 @@ export class GitHubClient {
         if (!/^[1-9][0-9]{0,18}$/u.test(runId)) {
             throw new AppError("invalid_input");
         }
-        return toRun(decode(runSchema, await this.#http.get(`/repos/${name}/actions/runs/${runId}`, signal)));
+        return toRun(
+            decode(
+                runSchema,
+                await this.#http.get(`/repos/${name}/actions/runs/${runId}`, signal, "actions_read_forbidden"),
+            ),
+        );
     };
 
     readonly runArtifactNames = async (
@@ -226,7 +240,11 @@ export class GitHubClient {
         const name = repositoryName(repository);
         const found = decode(
             artifactsSchema,
-            await this.#http.get(`/repos/${name}/actions/runs/${runId}/artifacts?per_page=${PAGE_SIZE}`, signal),
+            await this.#http.get(
+                `/repos/${name}/actions/runs/${runId}/artifacts?per_page=${PAGE_SIZE}`,
+                signal,
+                "actions_read_forbidden",
+            ),
         );
         return found.artifacts
             .filter((artifact) => artifact.workflow_run === null || artifact.workflow_run.id === Number(runId))
@@ -243,6 +261,7 @@ export class GitHubClient {
             `/repos/${repository.name}/actions/workflows/${purpose}.yml/dispatches`,
             { ref: repository.defaultBranch, inputs: { ...inputs } },
             signal,
+            "actions_write_forbidden",
         );
     };
 
@@ -251,7 +270,7 @@ export class GitHubClient {
         if (!/^[1-9][0-9]{0,18}$/u.test(runId)) {
             throw new AppError("invalid_input");
         }
-        await this.#http.post(`/repos/${name}/actions/runs/${runId}/cancel`, {}, signal);
+        await this.#http.post(`/repos/${name}/actions/runs/${runId}/cancel`, {}, signal, "actions_write_forbidden");
     };
 
     readonly createIssue = async (
@@ -261,12 +280,18 @@ export class GitHubClient {
         signal: AbortSignal,
     ): Promise<number> => {
         const name = repositoryName(repository);
-        return decode(issueSchema, await this.#http.post(`/repos/${name}/issues`, { title, body }, signal)).number;
+        return decode(
+            issueSchema,
+            await this.#http.post(`/repos/${name}/issues`, { title, body }, signal, "issues_write_forbidden"),
+        ).number;
     };
 
     readonly issue = async (repository: string, issue: number, signal: AbortSignal) => {
         const name = repositoryName(repository);
-        const found = decode(issueSchema, await this.#http.get(`/repos/${name}/issues/${issue}`, signal));
+        const found = decode(
+            issueSchema,
+            await this.#http.get(`/repos/${name}/issues/${issue}`, signal, "issues_read_forbidden"),
+        );
         return {
             title: found.title,
             state: found.state,
@@ -288,6 +313,7 @@ export class GitHubClient {
                 await this.#http.get(
                     `/repos/${name}/issues/${issue}/comments?per_page=${PAGE_SIZE}&page=${page}`,
                     signal,
+                    "issues_read_forbidden",
                 ),
             );
             comments.push(
@@ -306,7 +332,7 @@ export class GitHubClient {
 
     readonly comment = async (repository: string, issue: number, body: string, signal: AbortSignal) => {
         const name = repositoryName(repository);
-        await this.#http.post(`/repos/${name}/issues/${issue}/comments`, { body }, signal);
+        await this.#http.post(`/repos/${name}/issues/${issue}/comments`, { body }, signal, "issues_write_forbidden");
     };
 
     readonly closeIssue = async (repository: string, issue: number, signal: AbortSignal): Promise<void> => {
@@ -315,12 +341,16 @@ export class GitHubClient {
             `/repos/${name}/issues/${issue}`,
             { state: "closed", state_reason: "completed" },
             signal,
+            "issues_write_forbidden",
         );
     };
 
     readonly secretPublicKey = async (repository: string, signal: AbortSignal) => {
         const name = repositoryName(repository);
-        const key = decode(secretKeySchema, await this.#http.get(`/repos/${name}/actions/secrets/public-key`, signal));
+        const key = decode(
+            secretKeySchema,
+            await this.#http.get(`/repos/${name}/actions/secrets/public-key`, signal, "secrets_read_forbidden"),
+        );
         return { keyId: key.key_id, key: key.key };
     };
 
@@ -339,6 +369,7 @@ export class GitHubClient {
             `/repos/${name}/actions/secrets/${secret}`,
             { key_id: keyId, encrypted_value: encryptedValue },
             signal,
+            "secrets_write_forbidden",
         );
     };
 }
