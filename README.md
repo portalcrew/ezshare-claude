@@ -12,8 +12,10 @@ Share one Claude Code account with your team while every member keeps a private 
 
 A member opens the launcher, connects with a fine-grained GitHub token and starts a session. GitHub Actions
 starts a fresh runner for that member, Claude Code runs there with the team's shared account, and Morty connects
-it to the member's browser. Sessions last up to one hour and keep nothing afterwards. An account owner shares
-their Claude account once, from the same launcher.
+it to the member's browser. Sessions last up to one hour. Normal session shutdown encrypts the member's Claude
+conversation and workspace for the next session, under a key kept only in that browser. An unreadable archive
+is not overwritten unless the member chooses to replace it; clearing browser data loses its key. An account
+owner shares their Claude account once, from the same launcher.
 
 ## How it stays private
 
@@ -33,11 +35,18 @@ What it does not protect against is described in [SECURITY.md](SECURITY.md); rea
 1. Protect the default branch and require reviews. Anyone who can change the default branch can change the code
    that receives the shared token.
 2. Give members write access, so they can dispatch workflows and create Issues.
-3. The launcher is served at https://ezshare-claude.connect-screen.com, a static-assets Cloudflare Worker on an
-   origin of its own: the GitHub tokens members store in the browser are readable by any script on the same
-   origin, so it must never share one with other sites. Deploy it with `pnpm run deploy` (after `wrangler login`)
-   or the **Deploy launcher** workflow, which needs a `CLOUDFLARE_API_TOKEN` secret limited to Workers and the
-   `CLOUDFLARE_ACCOUNT_ID` variable. Security headers are defined in `src/web/public/_headers`.
+3. The launcher is served by GitHub Pages at https://ezshare-claude.connect-screen.com on an origin of its own.
+   The GitHub tokens members store in the browser are readable by any script on the same origin, so it must
+   never share one with other sites. Enable Pages with **Source: GitHub Actions** and set this custom domain in
+   the repository's Pages settings. Its DNS-only CNAME must point to `portalcrew.github.io`, without the repository
+   path. When migrating from the Worker, prepare Pages first, then remove only this hostname's Worker binding
+   and replace its managed DNS record. Keep the Worker itself available for rollback. Wait for the Pages
+   certificate and enable **Enforce HTTPS**. Keeping the same HTTPS hostname preserves browser vault ownership.
+   The **Deploy launcher** workflow checks, builds and publishes `dist/web` on pushes to main, or manually;
+   it needs no Cloudflare deployment secret or account variable. The build embeds the CSP from `vite.config.ts`;
+   Cloudflare `_headers` files do not configure GitHub Pages. Wrangler OAuth can manage the Worker binding but
+   does not grant DNS-record access: command-line DNS migration additionally needs a DNS Edit token scoped to
+   this zone. Never put that token in source, logs, or chat.
 4. The account owner opens **Share your account** in the launcher. Their token additionally needs Secrets read
    and write.
 
