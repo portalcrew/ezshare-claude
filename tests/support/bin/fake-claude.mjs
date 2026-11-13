@@ -1,12 +1,12 @@
 // Controlled stand-in for the Claude Code CLI at its process boundary: `-p` result JSON and the interactive
 // `setup-token` screen. It records which environment variables reached it.
-import { appendFileSync } from "node:fs";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
 const args = process.argv.slice(2);
 appendFileSync(
-    join(process.env.HOME ?? "/nonexistent", "agent-env.jsonl"),
+    `${process.env.HOME ?? "/nonexistent"}.agent-env.jsonl`,
     `${JSON.stringify({ program: "claude", command: args[0], names: Object.keys(process.env).sort() })}\n`,
 );
 const value = (name) => args[args.indexOf(name) + 1];
@@ -40,6 +40,13 @@ if (args[0] === "-p") {
         console.error("OAuth token revoked");
         process.exit(1);
     }
+    // Like the real CLI, the session is a JSONL file in the project directory named after the working directory.
+    const project = join(process.env.HOME, ".claude", "projects", process.cwd().replaceAll(/[^A-Za-z0-9]/gu, "-"));
+    mkdirSync(project, { recursive: true });
+    appendFileSync(
+        join(project, `${value("--session-id")}.jsonl`),
+        `${JSON.stringify({ type: "user", text: args[1] })}\n`,
+    );
     console.log(
         JSON.stringify({
             type: "result",

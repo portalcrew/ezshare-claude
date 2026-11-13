@@ -3,7 +3,16 @@ import { withDeadline } from "../../shared/async.ts";
 import { decodeBase64Url, encodeBase64Url } from "../../shared/base64url.ts";
 import type { ChannelKey } from "../../shared/channel-crypto.ts";
 import { AppError } from "../../shared/errors.ts";
-import { channelKeySchema, type Purpose, parseJson, requestIdSchema, userIdSchema } from "../../shared/protocol.ts";
+import {
+    channelKeySchema,
+    type HistoryMode,
+    historyKeySchema,
+    historyModeSchema,
+    type Purpose,
+    parseJson,
+    requestIdSchema,
+    userIdSchema,
+} from "../../shared/protocol.ts";
 
 /**
  * Browser storage for this origin. The GitHub token is encrypted under a non-extractable key kept beside it, which
@@ -47,6 +56,17 @@ const pendingSchema = v.strictObject({
     privateKey: v.instance(CryptoKey),
 });
 
+/**
+ * The member's history key for one repository, and whether the next session continues the saved history or
+ * replaces it. The key leaves the browser only inside the encrypted session channel; losing it loses the history.
+ */
+interface HistorySettings {
+    readonly key: string;
+    readonly mode: HistoryMode;
+}
+
+const historySchema = v.strictObject({ version: v.literal(1), key: historyKeySchema, mode: historyModeSchema });
+
 export interface Vault {
     readonly saveConnection: (connection: SavedConnection, signal: AbortSignal) => Promise<void>;
     readonly loadConnection: (signal: AbortSignal) => Promise<SavedConnection | null>;
@@ -64,48 +84,30 @@ export interface Vault {
         userId: string,
         signal: AbortSignal,
     ) => Promise<void>;
+    /** Loads the member's history settings, creating a key on first use. */
+    readonly history: (repository: string, userId: string, signal: AbortSignal) => Promise<HistorySettings>;
+    readonly setHistoryMode: (
+        repository: string,
+        userId: string,
+        mode: HistoryMode,
+        signal: AbortSignal,
+    ) => Promise<void>;
 }
 
 const pendingSlot = (purpose: Purpose, repository: string, userId: string) =>
     `pending:${purpose}:${repository}:${userId}`;
 
+const historySlot = (repository: string, userId: string) => `history:${repository}:${userId}`;
+
 export function createBrowserVault(apiOrigin: string): Vault {
     const connectionSlot = `connection:${apiOrigin}`;
+    const saveHistory = (repository: string, userId: string, settings: HistorySettings, signal: AbortSignal) =>
+        putSealed(historySlot(repository, userId), { version: 1, ...settings }, signal);
     return {
-        saveConnection: async (connection, signal) => {
-            const key = await vaultKey(signal);
-            const iv = crypto.getRandomValues(new Uint8Array(12));
-            const data = await crypto.subtle.encrypt(
-                { name: "AES-GCM", iv, additionalData: new TextEncoder().encode(connectionSlot) },
-                key,
-                new TextEncoder().encode(JSON.stringify(connection)),
-            );
-            await put(connectionSlot, { iv: encodeBase64Url(iv), data: encodeBase64Url(data) }, signal);
-        },
+        saveConnection: (connection, signal) => putSealed(connectionSlot, connection, signal),
         loadConnection: async (signal) => {
-            const record = v.safeParse(
-                v.object({ iv: v.string(), data: v.pipe(v.string(), v.maxLength(16_000)) }),
-                await get(connectionSlot, signal),
-            );
-            if (!record.success) {
-                return null;
-            }
-            try {
-                const plain = await crypto.subtle.decrypt(
-                    {
-                        name: "AES-GCM",
-                        iv: decodeBase64Url(record.output.iv),
-                        additionalData: new TextEncoder().encode(connectionSlot),
-                    },
-                    await vaultKey(signal),
-                    decodeBase64Url(record.output.data),
-                );
-                const connection = v.safeParse(connectionSchema, parseJson(new TextDecoder().decode(plain)));
-                return connection.success ? connection.output : null;
-            } catch {
-                // An unreadable record is discarded rather than trusted.
-                return null;
-            }
+            const connection = v.safeParse(connectionSchema, await getSealed(connectionSlot, signal));
+            return connection.success ? connection.output : null;
         },
         forgetConnection: (signal) => remove(connectionSlot, signal),
         savePending: (session, signal) =>
@@ -141,7 +143,59 @@ export function createBrowserVault(apiOrigin: string): Vault {
         },
         forgetPending: (purpose, repository, userId, signal) =>
             remove(pendingSlot(purpose, repository, userId), signal),
+        history: async (repository, userId, signal) => {
+            const saved = v.safeParse(historySchema, await getSealed(historySlot(repository, userId), signal));
+            if (saved.success) {
+                return { key: saved.output.key, mode: saved.output.mode };
+            }
+            const settings: HistorySettings = {
+                key: encodeBase64Url(crypto.getRandomValues(new Uint8Array(32))),
+                mode: "continue",
+            };
+            await saveHistory(repository, userId, settings, signal);
+            return settings;
+        },
+        setHistoryMode: async (repository, userId, mode, signal) => {
+            const saved = v.safeParse(historySchema, await getSealed(historySlot(repository, userId), signal));
+            if (saved.success && saved.output.mode !== mode) {
+                await saveHistory(repository, userId, { key: saved.output.key, mode }, signal);
+            }
+        },
     };
+}
+
+/** Stores a value encrypted under the vault key, bound to its slot. */
+async function putSealed(slot: string, value: unknown, signal: AbortSignal): Promise<void> {
+    const key = await vaultKey(signal);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const data = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv, additionalData: new TextEncoder().encode(slot) },
+        key,
+        new TextEncoder().encode(JSON.stringify(value)),
+    );
+    await put(slot, { iv: encodeBase64Url(iv), data: encodeBase64Url(data) }, signal);
+}
+
+/** Reads a sealed value as `unknown`, or `null` if it is missing or unreadable; the caller validates it. */
+async function getSealed(slot: string, signal: AbortSignal): Promise<unknown> {
+    const record = v.safeParse(
+        v.object({ iv: v.string(), data: v.pipe(v.string(), v.maxLength(16_000)) }),
+        await get(slot, signal),
+    );
+    if (!record.success) {
+        return null;
+    }
+    try {
+        const plain = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: decodeBase64Url(record.output.iv), additionalData: new TextEncoder().encode(slot) },
+            await vaultKey(signal),
+            decodeBase64Url(record.output.data),
+        );
+        return parseJson(new TextDecoder().decode(plain));
+    } catch {
+        // An unreadable record is discarded rather than trusted.
+        return null;
+    }
 }
 
 async function vaultKey(signal: AbortSignal): Promise<CryptoKey> {

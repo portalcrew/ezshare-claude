@@ -55,9 +55,12 @@ jobs:
           npm ci --prefix /opt/ezshare-tools --no-audit --no-fund
           echo "/opt/ezshare-tools/node_modules/.bin" >> "$GITHUB_PATH"
       - name: Create the unprivileged agent account
-        # Claude and Morty run here, unable to read this job's token, channel key or other processes.
+        # Claude and Morty run here, unable to read this job's token, channel key or other processes. The home is
+        # created empty: the runner image's /etc/skel holds about 800 MB of toolchains, and copying it took up to
+        # a minute and a half of every start.
         run: |
-          sudo useradd --create-home --home-dir "$EZSHARE_AGENT_HOME" --shell /usr/sbin/nologin "$EZSHARE_AGENT_USER"
+          sudo useradd --no-create-home --home-dir "$EZSHARE_AGENT_HOME" --shell /usr/sbin/nologin "$EZSHARE_AGENT_USER"
+          sudo install -d -o "$EZSHARE_AGENT_USER" -g "$EZSHARE_AGENT_USER" -m 0700 "$EZSHARE_AGENT_HOME"
           sudo -u "$EZSHARE_AGENT_USER" mkdir "$EZSHARE_AGENT_HOME/workspace"
       - name: Create the session channel key
         id: channel
@@ -70,8 +73,25 @@ jobs:
           path: ${{ steps.channel.outputs.artifact-path }}
           retention-days: 1
           if-no-files-found: error
+      - name: Restore the member's encrypted history
+        # Caches are readable by every run on the default branch; only the member's browser holds the key that
+        # opens this archive. The trailing "-run-" keeps one member's prefix from matching another member's id.
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ezshare-history
+          key: ezshare-history-${{ github.actor_id }}-run-${{ github.run_id }}
+          restore-keys: ezshare-history-${{ github.actor_id }}-run-
       - name: Serve the session
+        id: serve
         run: node src/runner/main.ts chat
         env:
           GH_TOKEN: ${{ github.token }}
           EZSHARE_CLAUDE_TOKEN: ${{ secrets.EZSHARE_CLAUDE_TOKEN }}
+      - name: Save the member's encrypted history
+        # Only when the session archived a history it was allowed to replace: an archive this browser could not
+        # read is never overwritten unless the member chose to.
+        if: always() && steps.serve.outputs.history == 'archived'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ezshare-history
+          key: ezshare-history-${{ github.actor_id }}-run-${{ github.run_id }}

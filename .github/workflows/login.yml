@@ -55,9 +55,12 @@ jobs:
           npm ci --prefix /opt/ezshare-tools --no-audit --no-fund
           echo "/opt/ezshare-tools/node_modules/.bin" >> "$GITHUB_PATH"
       - name: Create the unprivileged agent account
-        # Claude and Morty run here, unable to read this job's token, channel key or other processes.
+        # Claude and Morty run here, unable to read this job's token, channel key or other processes. The home is
+        # created empty: the runner image's /etc/skel holds about 800 MB of toolchains, and copying it took up to
+        # a minute and a half of every start.
         run: |
-          sudo useradd --create-home --home-dir "$EZSHARE_AGENT_HOME" --shell /usr/sbin/nologin "$EZSHARE_AGENT_USER"
+          sudo useradd --no-create-home --home-dir "$EZSHARE_AGENT_HOME" --shell /usr/sbin/nologin "$EZSHARE_AGENT_USER"
+          sudo install -d -o "$EZSHARE_AGENT_USER" -g "$EZSHARE_AGENT_USER" -m 0700 "$EZSHARE_AGENT_HOME"
           sudo -u "$EZSHARE_AGENT_USER" mkdir "$EZSHARE_AGENT_HOME/workspace"
       - name: Create the session channel key
         id: channel
