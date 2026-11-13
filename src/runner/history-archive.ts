@@ -212,6 +212,11 @@ export async function saveHistory(
     }
 }
 
+/** Claude's project directory for `workspace`, relative to the agent's home. Session transcripts live here. */
+export function claudeProject(workspace: string): string {
+    return join(".claude", "projects", workspace.replaceAll(/[^A-Za-z0-9]/gu, "-"));
+}
+
 /**
  * Finds the agent's most recently written Claude session in the workspace project, so the next session continues
  * the conversation the member saw last even if the harness moved to a new session.
@@ -223,7 +228,7 @@ export async function latestSessionId(
     fallback: string,
     signal: AbortSignal,
 ): Promise<string> {
-    const project = join(".claude", "projects", workspace.replaceAll(/[^A-Za-z0-9]/gu, "-"));
+    const project = claudeProject(workspace);
     const chunks: Buffer[] = [];
     const collect = new Transform({
         transform(chunk: Buffer, _encoding, callback) {

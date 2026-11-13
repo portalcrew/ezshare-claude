@@ -4,7 +4,7 @@ import { AppError } from "./errors.ts";
 /** A session is one workflow run that serves exactly one purpose for one member. */
 export type Purpose = "chat" | "login";
 
-const CHAT_LIFETIME_MS = 60 * 60_000;
+const CHAT_LIFETIME_MS = 4 * 60 * 60_000;
 const LOGIN_LIFETIME_MS = 15 * 60_000;
 export const SHARED_SECRET_NAME = "EZSHARE_CLAUDE_TOKEN";
 
