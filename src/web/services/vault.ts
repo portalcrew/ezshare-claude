@@ -101,6 +101,15 @@ const historySlot = (repository: string, userId: string) => `history:${repositor
 
 export function createBrowserVault(apiOrigin: string): Vault {
     const connectionSlot = `connection:${apiOrigin}`;
+    // The vault key never changes once stored, so one lookup serves every later read and write of this page.
+    let cachedKey: CryptoKey | null = null;
+    const vaultKey = async (signal: AbortSignal): Promise<CryptoKey> => {
+        cachedKey ??= await loadVaultKey(signal);
+        return cachedKey;
+    };
+    const putSealed = async (slot: string, value: unknown, signal: AbortSignal) =>
+        sealInto(await vaultKey(signal), slot, value, signal);
+    const getSealed = async (slot: string, signal: AbortSignal) => openFrom(await vaultKey(signal), slot, signal);
     const saveHistory = (repository: string, userId: string, settings: HistorySettings, signal: AbortSignal) =>
         putSealed(historySlot(repository, userId), { version: 1, ...settings }, signal);
     return {
@@ -165,8 +174,7 @@ export function createBrowserVault(apiOrigin: string): Vault {
 }
 
 /** Stores a value encrypted under the vault key, bound to its slot. */
-async function putSealed(slot: string, value: unknown, signal: AbortSignal): Promise<void> {
-    const key = await vaultKey(signal);
+async function sealInto(key: CryptoKey, slot: string, value: unknown, signal: AbortSignal): Promise<void> {
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const data = await crypto.subtle.encrypt(
         { name: "AES-GCM", iv, additionalData: new TextEncoder().encode(slot) },
@@ -177,7 +185,7 @@ async function putSealed(slot: string, value: unknown, signal: AbortSignal): Pro
 }
 
 /** Reads a sealed value as `unknown`, or `null` if it is missing or unreadable; the caller validates it. */
-async function getSealed(slot: string, signal: AbortSignal): Promise<unknown> {
+async function openFrom(key: CryptoKey, slot: string, signal: AbortSignal): Promise<unknown> {
     const record = v.safeParse(
         v.object({ iv: v.string(), data: v.pipe(v.string(), v.maxLength(16_000)) }),
         await get(slot, signal),
@@ -188,7 +196,7 @@ async function getSealed(slot: string, signal: AbortSignal): Promise<unknown> {
     try {
         const plain = await crypto.subtle.decrypt(
             { name: "AES-GCM", iv: decodeBase64Url(record.output.iv), additionalData: new TextEncoder().encode(slot) },
-            await vaultKey(signal),
+            key,
             decodeBase64Url(record.output.data),
         );
         return parseJson(new TextDecoder().decode(plain));
@@ -198,7 +206,15 @@ async function getSealed(slot: string, signal: AbortSignal): Promise<unknown> {
     }
 }
 
-async function vaultKey(signal: AbortSignal): Promise<CryptoKey> {
+/**
+ * Reads the stored vault key, creating it on first use. A candidate is generated only when none is stored; the
+ * write keeps a key another tab stored first.
+ */
+async function loadVaultKey(signal: AbortSignal): Promise<CryptoKey> {
+    const stored = await get(VAULT_KEY, signal);
+    if (stored !== undefined) {
+        return checkedVaultKey(stored);
+    }
     const candidate = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
     const selected = await transaction("readwrite", signal, (store, settle) => {
         const request = store.get(VAULT_KEY);
@@ -212,7 +228,11 @@ async function vaultKey(signal: AbortSignal): Promise<CryptoKey> {
             }
         };
     });
-    const parsed = v.safeParse(v.instance(CryptoKey), selected);
+    return checkedVaultKey(selected);
+}
+
+function checkedVaultKey(value: unknown): CryptoKey {
+    const parsed = v.safeParse(v.instance(CryptoKey), value);
     if (!parsed.success || parsed.output.extractable || parsed.output.algorithm.name !== "AES-GCM") {
         throw new AppError("storage_unavailable");
     }
