@@ -57,47 +57,52 @@ export async function runChat(
             let saving: { readonly key: string; readonly sessionId: string } | null = null;
             let history: HistoryEnd = "not_archived";
             try {
-                await withDeadline(Math.max(0, deadline - ports.clock.now()), sessionSignal, async (bounded) => {
-                    ports.diagnostics({ event: "session.stage", stage: "awaiting_history" });
-                    const request = await waitForHistory(channel, deadline, ports, bounded);
-                    if (request.kind === "stop") {
-                        return;
-                    }
-                    let start: HistoryStart = "off";
-                    let restoredSession: string | null = null;
-                    if (request.kind === "history") {
-                        ports.diagnostics({ event: "session.stage", stage: "restoring_history" });
-                        const restored =
-                            request.mode === "replace"
-                                ? ({ kind: "none" } as const)
-                                : await restoreHistory(archive, request.key, owner, context.agent, path, bounded);
-                        switch (restored.kind) {
-                            case "none":
-                                start = "new";
-                                break;
-                            case "unreadable":
-                                start = "unreadable";
-                                break;
-                            case "restored":
-                                start = "restored";
-                                restoredSession = restored.sessionId;
-                                break;
-                            default:
-                                return restored satisfies never;
+                await withDeadline(
+                    Math.max(0, deadline - ports.clock.now()),
+                    sessionSignal,
+                    async (bounded) => {
+                        ports.diagnostics({ event: "session.stage", stage: "awaiting_history" });
+                        const request = await waitForHistory(channel, deadline, ports, bounded);
+                        if (request.kind === "stop") {
+                            return;
                         }
-                    }
-                    ports.diagnostics({ event: "session.stage", stage: "starting_agent" });
-                    // A restored conversation already has its Claude session; only a new one needs creating.
-                    const sessionId = restoredSession ?? (await agent.startClaude(bounded));
-                    if (request.kind === "history" && start !== "unreadable") {
-                        saving = { key: request.key, sessionId };
-                    }
-                    ports.diagnostics({ event: "session.stage", stage: "connecting_morty" });
-                    const ready = await agent.connectMorty(sessionId, bounded);
-                    await channel.send({ kind: "ready", body: { ...ready, history: start } }, bounded);
-                    ports.diagnostics({ event: "session.stage", stage: "ready" });
-                    await waitForStop(channel, deadline, ports, agent.activity, bounded);
-                });
+                        let start: HistoryStart = "off";
+                        let restoredSession: string | null = null;
+                        if (request.kind === "history") {
+                            ports.diagnostics({ event: "session.stage", stage: "restoring_history" });
+                            const restored =
+                                request.mode === "replace"
+                                    ? ({ kind: "none" } as const)
+                                    : await restoreHistory(archive, request.key, owner, context.agent, path, bounded);
+                            switch (restored.kind) {
+                                case "none":
+                                    start = "new";
+                                    break;
+                                case "unreadable":
+                                    start = "unreadable";
+                                    break;
+                                case "restored":
+                                    start = "restored";
+                                    restoredSession = restored.sessionId;
+                                    break;
+                                default:
+                                    return restored satisfies never;
+                            }
+                        }
+                        ports.diagnostics({ event: "session.stage", stage: "starting_agent" });
+                        // A restored conversation already has its Claude session; only a new one needs creating.
+                        const sessionId = restoredSession ?? (await agent.startClaude(bounded));
+                        if (request.kind === "history" && start !== "unreadable") {
+                            saving = { key: request.key, sessionId };
+                        }
+                        ports.diagnostics({ event: "session.stage", stage: "connecting_morty" });
+                        const ready = await agent.connectMorty(sessionId, bounded);
+                        await channel.send({ kind: "ready", body: { ...ready, history: start } }, bounded);
+                        ports.diagnostics({ event: "session.stage", stage: "ready" });
+                        await waitForStop(channel, deadline, ports, agent.activity, bounded);
+                    },
+                    ports.clock,
+                );
             } catch (cause) {
                 // Reaching the session's lifetime is its normal end, not a failure.
                 if (!(cause instanceof AppError && cause.code === "timeout" && ports.clock.now() >= deadline)) {

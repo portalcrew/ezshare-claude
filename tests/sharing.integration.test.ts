@@ -116,3 +116,24 @@ test("Given a token that can read secret keys but cannot save secrets, When the 
     expect(getByRole(body, "button", { name: "Replace GitHub token" })).toBeTruthy();
     expect(app.github.secret(SHARED_SECRET_NAME)).toBeNull();
 });
+
+test("Given the owner opened the authorization page, When she never pastes the code, Then the login run ends once its 15-minute lifetime passes", async () => {
+    const current = await createTestApp();
+    app = current;
+    const body = document.body;
+    await openSharing(current, tokens.olivia);
+    await current.user.click(getByRole(body, "button", { name: "I understand, start authorization" }));
+    await current.eventually(() => getByRole(body, "link", { name: /Open the Claude authorization page/u }));
+    const run = current.github.runs.at(-1);
+    if (run === undefined) {
+        throw new Error("Expected the login run");
+    }
+    const opened = current.clock.now();
+
+    await current.eventually(() => expect(run.status).toBe("completed"), 15_000);
+
+    // Ending the terminal takes real time while the test clock keeps moving, so only the lower bound is exact.
+    expect(current.clock.now() - opened).toBeGreaterThanOrEqual(15 * 60_000);
+    expect(current.actions.jobs.get(run.id)?.error).toBe("timeout");
+    await current.eventually(() => getByRole(body, "button", { name: "I understand, start authorization" }));
+});

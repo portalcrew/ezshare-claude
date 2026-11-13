@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import * as v from "valibot";
+import { withDeadline } from "../shared/async.ts";
 import { decodeBase64Url } from "../shared/base64url.ts";
 import { AppError } from "../shared/errors.ts";
 import { parseJson, requestIdSchema } from "../shared/protocol.ts";
@@ -26,7 +27,8 @@ const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
 const MAX_MANIFEST_BYTES = 4096;
-const TAR_TIMEOUT_MS = 5 * 60_000;
+/** Watchdog for one streamed agent command (tar, ls), so a hung process cannot block the session. */
+const STREAM_TIMEOUT_MS = 5 * 60_000;
 
 /** The parts of the agent's home that never travel: credentials, caches, and Morty's device identity. */
 const EXCLUDED = ["./.claude/.credentials.json", "./.cache", "./.npm", "./morty", "node_modules"] as const;
@@ -253,17 +255,21 @@ export async function latestSessionId(
     return fallback;
 }
 
-/** Runs an agent command with streamed standard input or output. */
+/** Runs an agent command with streamed standard input or output. Expiry of the watchdog is a `timeout`. */
+interface StreamOptions {
+    readonly input?: NodeJS.ReadableStream;
+    readonly output?: NodeJS.WritableStream;
+    readonly acceptExitCodes?: readonly number[];
+}
+
 function streamAgentCommand(
     command: AgentCommand,
-    options: {
-        readonly input?: NodeJS.ReadableStream;
-        readonly output?: NodeJS.WritableStream;
-        readonly signal: AbortSignal;
-        readonly acceptExitCodes?: readonly number[];
-    },
+    options: StreamOptions & { readonly signal: AbortSignal },
 ): Promise<void> {
-    const signal = AbortSignal.any([options.signal, AbortSignal.timeout(TAR_TIMEOUT_MS)]);
+    return withDeadline(STREAM_TIMEOUT_MS, options.signal, (signal) => runStreamed(command, options, signal));
+}
+
+function runStreamed(command: AgentCommand, options: StreamOptions, signal: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
         const child = spawn(command.command, [...command.args], {
             cwd: "/",
