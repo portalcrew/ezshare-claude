@@ -37,16 +37,21 @@ export async function runLogin(
             );
             const terminal = new ClaudeTerminal(command);
             try {
-                await withDeadline(Math.max(0, deadline - ports.clock.now()), sessionSignal, async (bounded) => {
-                    const url = await withDeadline(AUTHORIZATION_URL_TIMEOUT_MS, bounded, terminal.authorization);
-                    await channel.send({ kind: "challenge", body: { url } }, bounded);
-                    ports.diagnostics({ event: "session.stage", stage: "awaiting_authorization" });
-                    const code = await waitForCode(channel, ports, bounded);
-                    ports.diagnostics({ event: "session.stage", stage: "completing_authorization" });
-                    const token = await terminal.complete(code, bounded);
-                    await channel.send({ kind: "token", body: { token } }, bounded);
-                    ports.diagnostics({ event: "session.stage", stage: "authorized" });
-                });
+                await withDeadline(
+                    Math.max(0, deadline - ports.clock.now()),
+                    sessionSignal,
+                    async (bounded) => {
+                        const url = await withDeadline(AUTHORIZATION_URL_TIMEOUT_MS, bounded, terminal.authorization);
+                        await channel.send({ kind: "challenge", body: { url } }, bounded);
+                        ports.diagnostics({ event: "session.stage", stage: "awaiting_authorization" });
+                        const code = await waitForCode(channel, ports, bounded);
+                        ports.diagnostics({ event: "session.stage", stage: "completing_authorization" });
+                        const token = await terminal.complete(code, bounded);
+                        await channel.send({ kind: "token", body: { token } }, bounded);
+                        ports.diagnostics({ event: "session.stage", stage: "authorized" });
+                    },
+                    ports.clock,
+                );
             } finally {
                 await terminal.dispose();
             }
