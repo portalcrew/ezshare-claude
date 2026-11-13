@@ -260,3 +260,24 @@ test("Given a Morty link with conflicting query and fragment workspaces, When se
     expect(alert.textContent).toContain("Morty could not connect");
     expect(queryByRole(body, "link", { name: /Open chat/u })).toBeNull();
 });
+
+test("Given the runner image points XDG_CONFIG_HOME at the runner's home, When Claude and Morty start, Then their tools keep configuration in the agent's own home", async () => {
+    const current = await createTestApp();
+    app = current;
+    const body = document.body;
+    await connect(current, tokens.alice);
+    await current.user.click(await current.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    await current.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
+    const run = current.github.runs[0];
+    const job = run === undefined ? undefined : current.actions.jobs.get(run.id);
+    if (run === undefined || job === undefined) {
+        throw new Error("Expected a running session");
+    }
+
+    const agentLog = await current.actions.agentLog(run.id);
+
+    expect(agentLog.length).toBeGreaterThan(0);
+    for (const entry of agentLog) {
+        expect(entry.configHome).toBe(`${job.agentHome}/.config`);
+    }
+});

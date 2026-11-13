@@ -11,7 +11,7 @@ const args = invocation.slice(2);
 const log = `${process.env.HOME ?? "/nonexistent"}.agent-env.jsonl`;
 appendFileSync(
     log,
-    `${JSON.stringify({ program: "npx", package: invocation[1], command: args[0], names: Object.keys(process.env).sort() })}\n`,
+    `${JSON.stringify({ program: "npx", package: invocation[1], command: args[0], names: Object.keys(process.env).sort(), configHome: process.env.XDG_CONFIG_HOME ?? null })}\n`,
 );
 const value = (name) => args[args.indexOf(name) + 1];
 

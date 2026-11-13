@@ -45,6 +45,10 @@ export async function agentCommand(
             "-C",
             cwd,
             `PATH=${path}`,
+            // sudo's PAM session applies the runner image's /etc/environment, whose XDG_CONFIG_HOME is the runner's
+            // own unreadable home. Set after sudo, so tools such as gh, git and pnpm keep their configuration in the
+            // agent's home, which travels with the member's history.
+            `XDG_CONFIG_HOME=${join(account.home, ".config")}`,
             executable,
             ...args,
         ],
