@@ -26,3 +26,18 @@ consequences. Follow [AGENTS.md](../AGENTS.md).
 Launchers already open in browsers, sessions in flight and the workflows on the default branch upgrade
 independently. A change to the dispatch inputs, the channel envelope, message kinds or the artifact name must
 keep working with the other side's previous version, or be explicitly authorized as a breaking change.
+
+## Deployment configuration
+
+A fork's Pages deployment injects `VITE_DEFAULT_REPOSITORY` from its own `github.repository` and derives
+`PAGES_BASE_PATH` from `actions/configure-pages`. Set custom domains in repository Pages settings; the workflow
+reads that existing configuration and uses `actions/deploy-pages`'s URL. Keep credentials out of both build
+variables. To prefill a repository during local development:
+
+```sh
+VITE_DEFAULT_REPOSITORY=your-org/your-repository pnpm dev
+```
+
+A default project Pages URL shares its origin with the owner's other Pages sites. Use a dedicated hostname for
+isolation from those sites, or trust every site on the shared host before entering a GitHub token. New hostnames
+have separate browser vaults and do not automatically recover another origin's history keys.
