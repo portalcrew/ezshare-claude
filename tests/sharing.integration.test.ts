@@ -55,7 +55,7 @@ test("Given a member whose token cannot write secrets, When she starts sharing, 
     const warning = getByRole(body, "region", { name: "GitHub access needs attention" });
     expect(warning.textContent).toContain("Secrets read and write");
     const template = within(warning)
-        .getByRole("link", { name: /Create a replacement token/u })
+        .getByRole("link", { name: /Create a token to share my Claude account/u })
         .getAttribute("href");
     expect(new URL(template ?? "").searchParams.get("secrets")).toBe("write");
     await app.user.click(getByRole(body, "button", { name: "Use the team account" }));

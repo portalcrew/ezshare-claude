@@ -155,14 +155,15 @@ function TokenAccessNotice({
                     </p>
                     <p>
                         Select <strong>{templates.owner}</strong> as the token's resource owner and allow access to
-                        <strong> {workspace.repository.name}</strong>. Sessions need Actions and Issues read and write.
-                        {sharingDenied && " Sharing your account also needs Secrets read and write."} If the token is
-                        pending organization approval, ask an organization owner to approve it. Your GitHub account also
-                        needs write access to the repository.
+                        <strong> {workspace.repository.name}</strong>. Sessions need Actions and Issues read and write.{" "}
+                        Sharing your account also needs Secrets read and write. If the token is pending organization
+                        approval, ask an organization owner to approve it. Your GitHub account also needs write access
+                        to the repository.
                     </p>
                     <div className="flex flex-wrap items-center gap-3">
-                        <ExternalLink href={sharingDenied ? templates.ownerSharing : templates.member}>
-                            Create a replacement token
+                        <ExternalLink href={templates.member}>Create a token to use the team account</ExternalLink>
+                        <ExternalLink href={templates.ownerSharing}>
+                            Create a token to share my Claude account
                         </ExternalLink>
                         <Button variant="secondary" onClick={onReplace}>
                             Replace GitHub token
