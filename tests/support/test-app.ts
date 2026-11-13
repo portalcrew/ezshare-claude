@@ -29,6 +29,7 @@ export async function createTestApp(
         readonly branchProtected?: boolean;
         readonly sharedToken?: string | null;
         readonly mortyFailure?: boolean;
+        readonly mortyHandoff?: "legacy" | "encrypted" | "conflicting";
     } = {},
 ) {
     const clock = new TestClock("2026-11-13T08:00:00.000Z");
@@ -52,6 +53,7 @@ export async function createTestApp(
         clock,
         sharedToken: () => sharedToken,
         ...(options.mortyFailure === undefined ? {} : { mortyFailure: options.mortyFailure }),
+        ...(options.mortyHandoff === undefined ? {} : { mortyHandoff: options.mortyHandoff }),
     });
 
     document.body.innerHTML = '<main id="app"></main>';

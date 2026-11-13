@@ -40,8 +40,19 @@ if (args[0] === "setup") {
     const url = new URL("https://morty.build/continue");
     url.searchParams.set("harness", "claude");
     url.searchParams.set("sessionId", value("--session-id"));
-    url.searchParams.set("workspace", value("--cwd"));
-    url.hash = "code=private-transfer-code";
+    if (existsSync(join(process.env.HOME, ".morty-legacy-handoff"))) {
+        url.searchParams.set("workspace", value("--cwd"));
+        url.hash = "code=private-transfer-code";
+    } else {
+        url.hash = new URLSearchParams({
+            code: "private-transfer-code",
+            workspace: value("--cwd"),
+            e2e: "opaque-morty-encryption-access",
+        }).toString();
+    }
+    if (existsSync(join(process.env.HOME, ".morty-conflicting-handoff"))) {
+        url.searchParams.set("workspace", "/another-member/workspace");
+    }
     console.log(JSON.stringify({ status: "computer_online" }));
     console.log(JSON.stringify({ status: "ready", url: url.href, accessExpiresAt: "2026-11-13T09:00:00.000Z" }));
     process.exit(0);

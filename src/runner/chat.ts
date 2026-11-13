@@ -305,16 +305,27 @@ class AgentSession {
             if (!ready.success) {
                 continue;
             }
-            const url = new URL(mortyUrl(ready.output.url));
+            let url: URL;
+            try {
+                url = new URL(mortyUrl(ready.output.url));
+            } catch (cause) {
+                this.#diagnostics({ event: "morty.failed", code: "HANDOFF_MISMATCH", exitCode: 0 });
+                throw new AppError("morty_unavailable", { cause });
+            }
+            const queryWorkspace = url.searchParams.get("workspace");
+            const workspace = new URLSearchParams(url.hash.slice(1)).get("workspace") ?? queryWorkspace;
             if (
                 !v.is(requestIdSchema, sessionId) ||
                 url.searchParams.get("sessionId") !== sessionId ||
-                url.searchParams.get("workspace") !== this.#workspace
+                workspace !== this.#workspace ||
+                (queryWorkspace !== null && queryWorkspace !== workspace)
             ) {
+                this.#diagnostics({ event: "morty.failed", code: "HANDOFF_MISMATCH", exitCode: 0 });
                 throw new AppError("morty_unavailable");
             }
             return { url: url.href, accessExpiresAt: ready.output.accessExpiresAt };
         }
+        this.#diagnostics({ event: "morty.failed", code: "READY_OUTPUT_INVALID", exitCode: 0 });
         throw new AppError("morty_unavailable");
     };
 
