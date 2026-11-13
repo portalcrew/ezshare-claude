@@ -27,7 +27,12 @@ export interface Job {
  */
 export async function startFakeActions(
     github: FakeGitHub,
-    options: { readonly repository: string; readonly clock: TestClock; readonly sharedToken: () => string | null },
+    options: {
+        readonly repository: string;
+        readonly clock: TestClock;
+        readonly mortyFailure?: boolean;
+        readonly sharedToken: () => string | null;
+    },
 ) {
     const root = await mkdtemp(join(tmpdir(), "ezshare-actions-"));
     const bin = join(root, "bin");
@@ -35,7 +40,7 @@ export async function startFakeActions(
     for (const [name, script] of [
         ["sudo", "fake-sudo.mjs"],
         ["claude", "fake-claude.mjs"],
-        ["morty", "fake-morty.mjs"],
+        ["npx", "fake-morty.mjs"],
     ] as const) {
         await writeFile(join(bin, name), `#!/bin/sh\nexec "${process.execPath}" "${join(FIXTURES, script)}" "$@"\n`);
         await chmod(join(bin, name), 0o755);
@@ -55,6 +60,9 @@ export async function startFakeActions(
         await rm(job.agentHome, { recursive: true, force: true });
         await rm(`${job.agentHome}.agent-env.jsonl`, { force: true });
         await mkdir(join(job.agentHome, "workspace"), { recursive: true });
+        if (options.mortyFailure === true) {
+            await writeFile(join(job.agentHome, ".morty-failure"), "INVALID_REQUEST");
+        }
         const output = join(directory, "github-output");
         await writeFile(output, "");
         const historyDirectory = join(runnerTemp, "ezshare-history");

@@ -28,6 +28,7 @@ export async function createTestApp(
         readonly defaultRepository?: string;
         readonly branchProtected?: boolean;
         readonly sharedToken?: string | null;
+        readonly mortyFailure?: boolean;
     } = {},
 ) {
     const clock = new TestClock("2026-11-13T08:00:00.000Z");
@@ -46,7 +47,12 @@ export async function createTestApp(
         github.grant(token, grant);
     }
     let sharedToken = options.sharedToken === undefined ? SHARED_CLAUDE_TOKEN : options.sharedToken;
-    const actions = await startFakeActions(github, { repository: REPOSITORY, clock, sharedToken: () => sharedToken });
+    const actions = await startFakeActions(github, {
+        repository: REPOSITORY,
+        clock,
+        sharedToken: () => sharedToken,
+        ...(options.mortyFailure === undefined ? {} : { mortyFailure: options.mortyFailure }),
+    });
 
     document.body.innerHTML = '<main id="app"></main>';
     const root = (): HTMLElement => {

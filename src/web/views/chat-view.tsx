@@ -48,7 +48,13 @@ export function ChatView({
                     case "idle":
                         return (
                             <>
-                                <Announcer message={phase.outcome === null ? "" : outcomeText(phase.outcome)} />
+                                <Announcer
+                                    message={
+                                        phase.outcome === null || phase.outcome.kind === "failed"
+                                            ? ""
+                                            : outcomeText(phase.outcome)
+                                    }
+                                />
                                 {phase.outcome !== null && <OutcomeNotice outcome={phase.outcome} />}
                                 <p className="text-sm">
                                     Start a private Claude session that uses the team account. A session lasts up to one

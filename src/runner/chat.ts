@@ -14,6 +14,7 @@ import {
 } from "../shared/protocol.ts";
 import { agentCommand, runAgentCommand } from "./agent-process.ts";
 import { type ActionsContext, historyArchivePath, type StepEnvironment } from "./context.ts";
+import type { Diagnostics } from "./diagnostics.ts";
 import { type HistoryOwner, latestSessionId, restoreHistory, saveHistory } from "./history-archive.ts";
 import { type ChatRunnerChannel, createChatChannel, type RunnerPorts, runSession } from "./session.ts";
 
@@ -45,7 +46,7 @@ export async function runChat(
                 throw new AppError("shared_account_missing");
             }
             const path = environment["PATH"] ?? "";
-            const agent = new AgentSession(context, path, token);
+            const agent = new AgentSession(context, path, token, ports.diagnostics);
             const owner = { repository: context.repository, userId: context.userId };
             const archive = historyArchivePath(context.runnerTemp);
             // Set only once the agent's home holds exactly what may be saved over the member's archive.
@@ -189,9 +190,11 @@ class AgentSession {
     readonly #path: string;
     readonly #variables: Readonly<Record<string, string>>;
     readonly #workspace: string;
+    readonly #diagnostics: Diagnostics;
 
-    constructor(context: ActionsContext, path: string, token: string) {
+    constructor(context: ActionsContext, path: string, token: string, diagnostics: Diagnostics) {
         this.#context = context;
+        this.#diagnostics = diagnostics;
         this.#path = path;
         this.#workspace = join(context.agent.home, "workspace");
         this.#variables = {
@@ -250,8 +253,10 @@ class AgentSession {
                 this.#context.agent,
                 this.#path,
                 this.#workspace,
-                "morty",
+                "npx",
                 [
+                    "--yes",
+                    "@morty-build/cli@latest",
                     "setup",
                     "--base-url",
                     "https://morty.build",
@@ -266,7 +271,34 @@ class AgentSession {
                 ],
                 this.#variables,
             ),
-            { timeout: 240_000, failure: "morty_unavailable", signal },
+            {
+                timeout: 240_000,
+                failure: "morty_unavailable",
+                signal,
+                onFailure: ({ stdout, exitCode }) => {
+                    const errorSchema = v.object({
+                        error: v.object({
+                            code: v.picklist([
+                                "INVALID_REQUEST",
+                                "INVALID_RESPONSE",
+                                "HARNESS_UNAVAILABLE",
+                                "RUNTIME_START_FAILED",
+                                "SETUP_FAILED",
+                                "SETUP_TIMEOUT",
+                                "TIMEOUT",
+                            ]),
+                        }),
+                    });
+                    for (const line of stdout.split("\n")) {
+                        const result = v.safeParse(errorSchema, safeJson(line.trim()));
+                        if (result.success) {
+                            this.#diagnostics({ event: "morty.failed", code: result.output.error.code, exitCode });
+                            return;
+                        }
+                    }
+                    this.#diagnostics({ event: "morty.failed", code: "UNRECOGNIZED", exitCode });
+                },
+            },
         );
         for (const line of output.split("\n")) {
             const ready = v.safeParse(mortyReadySchema, safeJson(line.trim()));
@@ -293,8 +325,8 @@ class AgentSession {
                     this.#context.agent,
                     this.#path,
                     this.#workspace,
-                    "morty",
-                    ["stop"],
+                    "npx",
+                    ["--yes", "@morty-build/cli@latest", "stop"],
                     this.#variables,
                 ),
                 { timeout: 15_000, failure: "morty_unavailable", signal: cleanupSignal(20_000) },

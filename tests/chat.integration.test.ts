@@ -1,4 +1,4 @@
-import { getByRole, queryByRole } from "@testing-library/dom";
+import { getAllByText, getByRole, queryByRole } from "@testing-library/dom";
 import { afterEach, expect, test } from "vitest";
 import { SessionChannel } from "../src/shared/channel.ts";
 import { createChannelKey, deriveChannelKeys } from "../src/shared/channel-crypto.ts";
@@ -31,7 +31,7 @@ test("Given a connected member, When she starts a session and later ends it, The
     }
     expect(run.actor.id).toBe(alice.id);
     const agentLog = await app.actions.agentLog(run.id);
-    expect(agentLog.map((entry) => entry.program)).toEqual(["claude", "morty"]);
+    expect(agentLog.map((entry) => entry.program)).toEqual(["claude", "npx"]);
     for (const entry of agentLog) {
         expect(entry.names.filter((name) => name.startsWith("GH_") || name.startsWith("GITHUB_"))).toEqual([]);
         expect(entry.names).not.toContain("RUNNER_TEMP");
@@ -42,7 +42,7 @@ test("Given a connected member, When she starts a session and later ends it, The
     expect(getByRole(body, "status").textContent).toContain("Your last session ended");
     expect(queryByRole(body, "link", { name: /Open chat/u })).toBeNull();
     expect(run.conclusion).toBe("success");
-    expect((await app.actions.agentLog(run.id)).at(-1)).toMatchObject({ program: "morty", command: "stop" });
+    expect((await app.actions.agentLog(run.id)).at(-1)).toMatchObject({ program: "npx", command: "stop" });
     expect(app.github.issues[0]?.state).toBe("closed");
 });
 
@@ -214,4 +214,25 @@ test("Given an account-sharing run shown on the session page, When it finishes b
     expect(queryByRole(body, "alert")).toBeNull();
     expect(queryByRole(body, "region", { name: "GitHub access needs attention" })).toBeNull();
     expect(run.conclusion).toBe("success");
+});
+
+test("Given Morty rejects setup, When a member starts a session, Then she sees one failure and public diagnostics contain only the safe error code", async () => {
+    app = await createTestApp({ mortyFailure: true });
+    const body = document.body;
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    const alert = await app.eventually(() => getByRole(body, "alert"));
+    expect(alert.textContent).toContain("Morty could not connect");
+    expect(getAllByText(body, "Morty could not connect. Start a new session in a few minutes.")).toHaveLength(1);
+    const job = await app.eventually(() => {
+        const current = [...(app?.actions.jobs.values() ?? [])][0];
+        if (current === undefined) {
+            throw new Error("Expected the session job");
+        }
+        return current;
+    });
+    await job.done;
+    expect(job.diagnostics).toContainEqual({ event: "morty.failed", code: "INVALID_REQUEST", exitCode: 1 });
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-provider-detail");
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-code");
 });
