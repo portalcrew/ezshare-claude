@@ -91,7 +91,9 @@ export async function restoreHistory(
         if (!header.subarray(0, MAGIC.length).equals(MAGIC)) {
             return { kind: "unreadable" };
         }
-        const decipher = createDecipheriv("aes-256-gcm", historyKey(key), header.subarray(MAGIC.length));
+        const decipher = createDecipheriv("aes-256-gcm", historyKey(key), header.subarray(MAGIC.length), {
+            authTagLength: TAG_BYTES,
+        });
         decipher.setAAD(associatedData(owner));
         decipher.setAuthTag(tag);
         try {
@@ -162,7 +164,7 @@ export async function saveHistory(
     await rm(partial, { force: true });
     try {
         const nonce = randomBytes(NONCE_BYTES);
-        const cipher = createCipheriv("aes-256-gcm", historyKey(key), nonce);
+        const cipher = createCipheriv("aes-256-gcm", historyKey(key), nonce, { authTagLength: TAG_BYTES });
         cipher.setAAD(associatedData(owner));
         const manifest = Buffer.from(`${JSON.stringify({ version: 1, sessionId })}\n`);
         let bytes = 0;

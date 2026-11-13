@@ -89,34 +89,39 @@ test("Given history saved from another browser, When the member starts a session
     expect(queryByRole(body, "button", { name: "Replace it from the next session" })).toBeNull();
 });
 
-test("Given an archive copied under another member's cache key or modified, When that session starts, Then it cannot be opened and is not overwritten", async () => {
-    app = await createTestApp();
-    const body = document.body;
-    await connect(app, tokens.alice);
-    await runSession(app);
-    await endSession(app);
-    const [saved] = [...app.actions.cache.values()];
-    if (saved === undefined) {
-        throw new Error("Expected a saved archive");
-    }
+test.each(["modified ciphertext", "truncated tag"])(
+    "Given an archive copied under another member's cache key or containing %s, When that session starts, Then it cannot be opened and is not overwritten",
+    async (damage) => {
+        app = await createTestApp();
+        const body = document.body;
+        await connect(app, tokens.alice);
+        await runSession(app);
+        await endSession(app);
+        const [saved] = [...app.actions.cache.values()];
+        if (saved === undefined) {
+            throw new Error("Expected a saved archive");
+        }
 
-    // Another member's run restoring Alice's archive (as if it were saved under his key) cannot open it.
-    app.actions.cache.set(`ezshare-history-${bob.id}-run-1`, saved);
-    await switchBrowser(app, tokens.bob);
-    await runSession(app);
-    expect(getByRole(body, "main").textContent).toContain("Your saved history could not be opened");
-    expect(await endSession(app)).toContain("Its history was not saved");
-    expect(app.actions.cache.size).toBe(2);
+        // Another member's run restoring Alice's archive (as if it were saved under his key) cannot open it.
+        app.actions.cache.set(`ezshare-history-${bob.id}-run-1`, saved);
+        await switchBrowser(app, tokens.bob);
+        await runSession(app);
+        expect(getByRole(body, "main").textContent).toContain("Your saved history could not be opened");
+        expect(await endSession(app)).toContain("Its history was not saved");
+        expect(app.actions.cache.size).toBe(2);
 
-    // Flip one byte of Alice's encrypted archive: authentication fails, so nothing of it is unpacked.
-    await switchBrowser(app);
-    const archive = join(saved, "history.bin");
-    const bytes = await readFile(archive);
-    bytes[bytes.length - 40] = (bytes[bytes.length - 40] ?? 0) ^ 0xff;
-    await writeFile(archive, bytes);
+        // Damaged ciphertext or an incomplete tag must fail before anything is unpacked.
+        await switchBrowser(app);
+        const archive = join(saved, "history.bin");
+        const bytes = await readFile(archive);
+        if (damage === "modified ciphertext") {
+            bytes[bytes.length - 40] = (bytes[bytes.length - 40] ?? 0) ^ 0xff;
+        }
+        await writeFile(archive, damage === "truncated tag" ? bytes.subarray(0, bytes.length - 12) : bytes);
 
-    await runSession(app);
-    expect(getByRole(body, "main").textContent).toContain("Your saved history could not be opened");
-    expect(await endSession(app)).toContain("Its history was not saved");
-    expect(app.actions.cache.size).toBe(2);
-});
+        await runSession(app);
+        expect(getByRole(body, "main").textContent).toContain("Your saved history could not be opened");
+        expect(await endSession(app)).toContain("Its history was not saved");
+        expect(app.actions.cache.size).toBe(2);
+    },
+);
