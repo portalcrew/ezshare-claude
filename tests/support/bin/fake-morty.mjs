@@ -1,16 +1,33 @@
-// Controlled stand-in for the Morty CLI at its process boundary: `setup` NDJSON output and `stop`.
+// Controlled stand-in for npx executing the current Morty CLI: setup NDJSON output and stop.
 import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const args = process.argv.slice(2);
+const invocation = process.argv.slice(2);
+if (invocation[0] !== "--yes" || invocation[1] !== "@morty-build/cli@latest") {
+    console.error("Expected npx to execute the latest Morty CLI");
+    process.exit(2);
+}
+const args = invocation.slice(2);
 const log = `${process.env.HOME ?? "/nonexistent"}.agent-env.jsonl`;
 appendFileSync(
     log,
-    `${JSON.stringify({ program: "morty", command: args[0], names: Object.keys(process.env).sort() })}\n`,
+    `${JSON.stringify({ program: "npx", package: invocation[1], command: args[0], names: Object.keys(process.env).sort() })}\n`,
 );
 const value = (name) => args[args.indexOf(name) + 1];
 
 if (args[0] === "setup") {
+    if (existsSync(join(process.env.HOME, ".morty-failure"))) {
+        console.log(
+            JSON.stringify({
+                error: {
+                    code: "INVALID_REQUEST",
+                    message: "private-provider-detail",
+                    url: "https://morty.build/continue#code=private-code",
+                },
+            }),
+        );
+        process.exit(1);
+    }
     // The member's conversation continues in the Claude session Morty attaches to; record that it was found.
     const project = join(process.env.HOME, ".claude", "projects", value("--cwd").replaceAll(/[^A-Za-z0-9]/gu, "-"));
     const session = join(project, `${value("--session-id")}.jsonl`);

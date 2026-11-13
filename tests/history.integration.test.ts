@@ -25,9 +25,16 @@ async function runSession(current: TestApp): Promise<{ readonly url: URL; readon
 
 async function endSession(current: TestApp): Promise<string> {
     const body = document.body;
+    const run = current.github.runs.at(-1);
+    if (run === undefined) {
+        throw new Error("Expected the session run");
+    }
     await current.user.click(getByRole(body, "button", { name: "End session" }));
     await current.eventually(() => getByRole(body, "button", { name: "Start a session" }));
-    return getByRole(body, "status").textContent ?? "";
+    const message = getByRole(body, "status").textContent ?? "";
+    // The stopped message precedes the workflow's cache-save step.
+    await current.eventually(() => expect(run.status).toBe("completed"));
+    return message;
 }
 
 /** A new browser profile: nothing the previous one stored is available. */

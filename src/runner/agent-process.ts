@@ -59,6 +59,7 @@ export function runAgentCommand(
         readonly timeout: number;
         readonly failure: ErrorCode;
         readonly signal: AbortSignal;
+        readonly onFailure?: (result: { readonly stdout: string; readonly exitCode: number | null }) => void;
     },
 ): Promise<string> {
     return withDeadline(
@@ -74,6 +75,12 @@ export function runAgentCommand(
                         if (error === null) {
                             resolve(stdout);
                         } else {
+                            if (!signal.aborted) {
+                                options.onFailure?.({
+                                    stdout,
+                                    exitCode: typeof error.code === "number" ? error.code : null,
+                                });
+                            }
                             reject(signal.aborted ? error : new AppError(options.failure, { cause: error }));
                         }
                     },

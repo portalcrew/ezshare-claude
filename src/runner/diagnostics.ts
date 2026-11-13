@@ -22,7 +22,20 @@ export type DiagnosticRecord =
               | "stopping"
               | "closed";
       }
-    | { readonly event: "session.failed"; readonly code: ErrorCode };
+    | { readonly event: "session.failed"; readonly code: ErrorCode }
+    | {
+          readonly event: "morty.failed";
+          readonly code:
+              | "INVALID_REQUEST"
+              | "INVALID_RESPONSE"
+              | "HARNESS_UNAVAILABLE"
+              | "RUNTIME_START_FAILED"
+              | "SETUP_FAILED"
+              | "SETUP_TIMEOUT"
+              | "TIMEOUT"
+              | "UNRECOGNIZED";
+          readonly exitCode: number | null;
+      };
 
 export type Diagnostics = (record: DiagnosticRecord) => void;
 

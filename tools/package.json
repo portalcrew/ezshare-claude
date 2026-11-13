@@ -1,9 +1,8 @@
 {
     "name": "ezshare-claude-agent-tools",
     "private": true,
-    "description": "Agent CLIs installed on session runners with `npm ci`, so every tarball is checked against the lockfile.",
+    "description": "Claude Code installed on session runners with npm ci. Morty runs through npx @morty-build/cli@latest.",
     "dependencies": {
-        "@anthropic-ai/claude-code": "2.1.323",
-        "@morty-build/cli": "0.4.253"
+        "@anthropic-ai/claude-code": "2.1.323"
     }
 }
