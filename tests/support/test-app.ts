@@ -25,6 +25,7 @@ export const tokens = {
 export async function createTestApp(
     options: {
         readonly isPrivate?: boolean;
+        readonly defaultRepository?: string;
         readonly branchProtected?: boolean;
         readonly sharedToken?: string | null;
     } = {},
@@ -55,7 +56,12 @@ export async function createTestApp(
         }
         return element;
     };
-    let unmount = mountLauncher(root(), { apiOrigin: github.origin, clock });
+    const launcherOptions = {
+        apiOrigin: github.origin,
+        clock,
+        ...(options.defaultRepository === undefined ? {} : { defaultRepository: options.defaultRepository }),
+    };
+    let unmount = mountLauncher(root(), launcherOptions);
 
     return {
         clock,
@@ -77,7 +83,7 @@ export async function createTestApp(
         reload: () => {
             unmount();
             document.body.innerHTML = '<main id="app"></main>';
-            unmount = mountLauncher(root(), { apiOrigin: github.origin, clock });
+            unmount = mountLauncher(root(), launcherOptions);
         },
         close: async () => {
             unmount();

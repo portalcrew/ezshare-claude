@@ -32,7 +32,7 @@ const contentSecurityPolicy = (): Plugin => ({
 
 export default defineConfig({
     root: "src/web",
-    base: "/",
+    base: process.env["PAGES_BASE_PATH"] ?? "/",
     plugins: [react(), tailwindcss(), contentSecurityPolicy()],
     build: { outDir: "../../dist/web", emptyOutDir: true, sourcemap: false, assetsInlineLimit: 0 },
     server: { host: "127.0.0.1", port: 4173 },
