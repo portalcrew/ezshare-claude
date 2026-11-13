@@ -1,7 +1,7 @@
 import * as v from "valibot";
 import { type Clock, cleanupSignal } from "../shared/async.ts";
-import { SessionChannel } from "../shared/channel.ts";
-import { deriveChannelKeys } from "../shared/channel-crypto.ts";
+import { type MessageSchema, SessionChannel } from "../shared/channel.ts";
+import { type ChannelKeys, deriveChannelKeys } from "../shared/channel-crypto.ts";
 import { AppError, toAppError } from "../shared/errors.ts";
 import { GitHubClient } from "../shared/github/client.ts";
 import {
@@ -79,7 +79,12 @@ const ARTIFACT_CHECKS = 6;
 const ARTIFACT_CHECK_INTERVAL_MS = 5_000;
 
 /** Loads this run's key and waits until GitHub lists it as published, so the browser can find the same key. */
-async function channelKeys(context: ActionsContext, session: VerifiedSession, ports: RunnerPorts, signal: AbortSignal) {
+async function channelKeys(
+    context: ActionsContext,
+    session: VerifiedSession,
+    ports: RunnerPorts,
+    signal: AbortSignal,
+): Promise<ChannelKeys> {
     const own = await loadChannelKey(context.runnerTemp);
     for (let check = 1; ; check++) {
         const published = publishedRunnerKey(
@@ -109,11 +114,7 @@ export async function runSession<TChannel>(
     ports: RunnerPorts,
     signal: AbortSignal,
     protocol: {
-        readonly create: (
-            github: GitHubClient,
-            binding: ChannelBinding,
-            keys: Awaited<ReturnType<typeof deriveChannelKeys>>,
-        ) => TChannel;
+        readonly create: (github: GitHubClient, binding: ChannelBinding, keys: ChannelKeys) => TChannel;
         readonly work: (session: SessionHandle<TChannel>, signal: AbortSignal) => Promise<void>;
         readonly reportFailure: (channel: TChannel, code: RunnerFailure, signal: AbortSignal) => Promise<void>;
     },
@@ -145,35 +146,16 @@ export async function runSession<TChannel>(
     }
 }
 
-export function createChatChannel(
-    github: GitHubClient,
-    binding: ChannelBinding,
-    keys: Awaited<ReturnType<typeof deriveChannelKeys>>,
-): ChatRunnerChannel {
-    return new SessionChannel({
-        github,
-        binding,
-        self: "runner",
-        keys,
-        outbound: chatRunnerMessageSchema,
-        inbound: chatBrowserMessageSchema,
-    });
+/** Creates the runner's end of a session channel for one purpose's message schemas. */
+function runnerChannel<TOutbound extends MessageSchema, TInbound extends MessageSchema>(
+    outbound: TOutbound,
+    inbound: TInbound,
+): (github: GitHubClient, binding: ChannelBinding, keys: ChannelKeys) => SessionChannel<TOutbound, TInbound> {
+    return (github, binding, keys) => new SessionChannel({ github, binding, self: "runner", keys, outbound, inbound });
 }
 
-export function createLoginChannel(
-    github: GitHubClient,
-    binding: ChannelBinding,
-    keys: Awaited<ReturnType<typeof deriveChannelKeys>>,
-): LoginRunnerChannel {
-    return new SessionChannel({
-        github,
-        binding,
-        self: "runner",
-        keys,
-        outbound: loginRunnerMessageSchema,
-        inbound: loginBrowserMessageSchema,
-    });
-}
+export const createChatChannel = runnerChannel(chatRunnerMessageSchema, chatBrowserMessageSchema);
+export const createLoginChannel = runnerChannel(loginRunnerMessageSchema, loginBrowserMessageSchema);
 
 function reportable(code: string): RunnerFailure {
     const parsed = v.safeParse(runnerFailureSchema.entries.code, code);

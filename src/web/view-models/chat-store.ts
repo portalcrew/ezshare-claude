@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import { AppError, type ErrorCode, toAppError } from "../../shared/errors.ts";
+import { AppError, type ErrorCode } from "../../shared/errors.ts";
 import type { WorkflowRun } from "../../shared/github/client.ts";
 import {
     type ChatBrowserMessage,
@@ -11,7 +11,6 @@ import {
     mortyUrl,
 } from "../../shared/protocol.ts";
 import type { PendingSession } from "../services/vault.ts";
-import { SerialWork } from "./serial-work.ts";
 import {
     abandonSession,
     beginSession,
@@ -20,10 +19,15 @@ import {
     requireRun,
     sessionExpired,
 } from "./session-protocol.ts";
+import { StoreWorkflow } from "./store-workflow.ts";
 
 const POLL_STARTING_MS = 5_000;
 const POLL_READY_MS = 30_000;
 const POLL_IDLE_MS = 30_000;
+/** Polling slows down while GitHub keeps failing. */
+const POLL_PROBLEM_MS = 15_000;
+
+const schemas = { outbound: chatBrowserMessageSchema, inbound: chatRunnerMessageSchema };
 
 /** How the member's previous session ended, shown until the next one starts. */
 export type ChatOutcome =
@@ -77,8 +81,6 @@ export type ChatStore = ReturnType<typeof createChatStore>;
 
 /** The member's personal Claude session: start, observe, hand over the chat link, stop. */
 export function createChatStore(member: MemberContext) {
-    const work = new SerialWork();
-    let wake: AbortController | null = null;
     // A session that reported its end may still be cleaning up; it is not another unfinished session.
     let ending: string | null = null;
     // Sessions this page has handed its history key to; the runner keeps the first key it receives.
@@ -90,12 +92,7 @@ export function createChatStore(member: MemberContext) {
                 await abandonSession(member, session);
                 return { kind: "idle", outcome: { kind: "expired" } };
             }
-            const observation = await observeSession(
-                member,
-                session,
-                { outbound: chatBrowserMessageSchema, inbound: chatRunnerMessageSchema },
-                signal,
-            );
+            const observation = await observeSession(member, session, schemas, signal);
             const current = get().phase;
             const stopping = current.kind === "stopping" ? current : null;
             // A cancel requested before the run was visible is carried out as soon as it is.
@@ -207,56 +204,17 @@ export function createChatStore(member: MemberContext) {
             return runs.length === 0 ? { kind: "idle", outcome } : { kind: "busy", runs };
         };
 
-        const loop = async (signal: AbortSignal): Promise<void> => {
-            while (!signal.aborted) {
-                try {
-                    await work.run(synchronize);
-                } catch (cause) {
-                    const error = toAppError(cause);
-                    if (error.code === "cancelled") {
-                        return;
-                    }
-                    set({ problem: error.code });
-                }
-                wake = new AbortController();
-                try {
-                    await member.clock.sleep(interval(get()), AbortSignal.any([signal, wake.signal]));
-                } catch {
-                    /* Woken early by a command, or closed. */
-                }
-            }
-        };
-
-        const command = (name: Exclude<ChatCommand, null>, task: (signal: AbortSignal) => Promise<void>) => {
-            if (get().command !== null || work.signal === null) {
-                return;
-            }
-            set({ command: name, commandError: null });
-            work.run(task).then(
-                () => {
-                    set({ command: null });
-                    wake?.abort();
-                },
-                (cause: unknown) => {
-                    const error = toAppError(cause);
-                    if (error.code === "cancelled") {
-                        return;
-                    }
-                    set({ command: null, commandError: error.code });
-                    wake?.abort();
-                },
-            );
-        };
-
-        const runOf = async (session: PendingSession, signal: AbortSignal) =>
-            requireRun(
-                await observeSession(
-                    member,
-                    session,
-                    { outbound: chatBrowserMessageSchema, inbound: chatRunnerMessageSchema },
-                    signal,
-                ),
-            );
+        const workflow = new StoreWorkflow<Exclude<ChatCommand, null>>({
+            clock: member.clock,
+            synchronize,
+            interval: () => interval(get()),
+            currentCommand: () => get().command,
+            reportProblem: (problem) => set({ problem }),
+            commandStarted: (command) => set({ command, commandError: null }),
+            commandFinished: (error) =>
+                set(error === null ? { command: null } : { command: null, commandError: error }),
+        });
+        const command = workflow.command;
 
         return {
             phase: { kind: "loading" },
@@ -264,15 +222,9 @@ export function createChatStore(member: MemberContext) {
             problem: null,
             commandError: null,
             replacingHistory: false,
-            open: () => {
-                void loop(work.open());
-            },
-            close: () => {
-                work.close();
-            },
-            refresh: () => {
-                wake?.abort();
-            },
+            open: workflow.open,
+            close: workflow.close,
+            refresh: workflow.refresh,
             start: () =>
                 command("start", async (signal) => {
                     const phase = get().phase;
@@ -296,12 +248,7 @@ export function createChatStore(member: MemberContext) {
                     if (phase.kind !== "ready" && phase.kind !== "preparing" && phase.kind !== "queued") {
                         return;
                     }
-                    const observation = await observeSession(
-                        member,
-                        phase.session,
-                        { outbound: chatBrowserMessageSchema, inbound: chatRunnerMessageSchema },
-                        signal,
-                    );
+                    const observation = await observeSession(member, phase.session, schemas, signal);
                     if (observation.kind === "running" && observation.channel !== null) {
                         const stop: ChatBrowserMessage = { kind: "stop", body: {} };
                         await observation.channel.send(stop, signal);
@@ -317,13 +264,15 @@ export function createChatStore(member: MemberContext) {
             forceStop: () =>
                 command("force_stop", async (signal) => {
                     const phase = get().phase;
-                    if (phase.kind === "loading" || phase.kind === "idle" || phase.kind === "busy") {
+                    if (
+                        phase.kind === "loading" ||
+                        phase.kind === "idle" ||
+                        phase.kind === "busy" ||
+                        phase.kind === "starting"
+                    ) {
                         return;
                     }
-                    if (phase.kind === "starting") {
-                        return;
-                    }
-                    const run = await runOf(phase.session, signal);
+                    const run = requireRun(await observeSession(member, phase.session, schemas, signal));
                     if (run.status !== "completed") {
                         await member.github.cancelRun(member.repository.name, run.id, signal);
                     }
@@ -370,7 +319,7 @@ function outcomeOf(
 
 function interval(state: ChatState): number {
     if (state.problem !== null) {
-        return POLL_STARTING_MS * 3;
+        return POLL_PROBLEM_MS;
     }
     switch (state.phase.kind) {
         case "loading":

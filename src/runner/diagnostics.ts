@@ -1,5 +1,16 @@
 import type { ErrorCode } from "../shared/errors.ts";
 
+/** Failure codes the Morty CLI reports in its JSON error output. */
+export const MORTY_ERROR_CODES = [
+    "INVALID_REQUEST",
+    "INVALID_RESPONSE",
+    "HARNESS_UNAVAILABLE",
+    "RUNTIME_START_FAILED",
+    "SETUP_FAILED",
+    "SETUP_TIMEOUT",
+    "TIMEOUT",
+] as const;
+
 /**
  * Structured progress written to the public workflow log. Records carry stages and codes only, never tokens,
  * links, authorization codes or conversation content.
@@ -26,13 +37,7 @@ export type DiagnosticRecord =
     | {
           readonly event: "morty.failed";
           readonly code:
-              | "INVALID_REQUEST"
-              | "INVALID_RESPONSE"
-              | "HARNESS_UNAVAILABLE"
-              | "RUNTIME_START_FAILED"
-              | "SETUP_FAILED"
-              | "SETUP_TIMEOUT"
-              | "TIMEOUT"
+              | (typeof MORTY_ERROR_CODES)[number]
               | "UNRECOGNIZED"
               | "HANDOFF_MISMATCH"
               | "READY_OUTPUT_INVALID";
