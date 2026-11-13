@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useId, useRef, useState } from "react";
-import type { TokenTemplates } from "../view-models/copy.ts";
+import type { ConnectionFormCopy, TokenTemplates } from "../view-models/copy.ts";
 import { Button, focusRing } from "./ui/button.tsx";
 import { ExternalLink } from "./ui/external-link.tsx";
 import { cn } from "./utils/cn.ts";
@@ -9,11 +9,13 @@ const field =
 
 /** The three connection steps. The repository field is local state so the token links follow it as typed. */
 export function ConnectionForm({
+    copy,
     initialRepository,
     templatesFor,
     busy,
     onConnect,
 }: {
+    readonly copy: ConnectionFormCopy;
     readonly initialRepository: string;
     readonly templatesFor: (repository: string) => TokenTemplates | null;
     readonly busy: boolean;
@@ -35,14 +37,14 @@ export function ConnectionForm({
     return (
         <form onSubmit={submit}>
             <ol className="space-y-6">
-                <Step number={1} title="Confirm the team repository">
+                <Step number={1} label={copy.stepLabel(1)} title={copy.repositoryStep}>
                     <label className="block text-sm font-semibold">
-                        Repository
+                        {copy.repositoryLabel}
                         <input
                             name="repository"
                             value={repository}
                             onChange={(event) => setRepository(event.currentTarget.value)}
-                            placeholder="owner/name"
+                            placeholder={copy.repositoryPlaceholder}
                             autoComplete="off"
                             spellCheck={false}
                             required
@@ -50,45 +52,41 @@ export function ConnectionForm({
                         />
                     </label>
                 </Step>
-                <Step number={2} title="Create a fine-grained GitHub token">
+                <Step number={2} label={copy.stepLabel(2)} title={copy.tokenStep}>
                     {templates === null ? (
-                        <p className="text-sm">Enter the repository as owner/name to get a prefilled token link.</p>
+                        <p className="text-sm">{copy.noTemplates}</p>
                     ) : (
                         <>
                             <p className="text-sm">
-                                Choose what you want to do. Both links select <strong>{templates.owner}</strong> as the
-                                resource owner. Under Repository access choose <strong>Only select repositories</strong>{" "}
-                                and pick <strong>{templates.name}</strong>.
+                                {copy.templates.beforeOwner}
+                                <strong>{templates.owner}</strong>
+                                {copy.templates.afterOwner}
+                                <strong>{copy.templates.accessChoice}</strong>
+                                {copy.templates.beforeName}
+                                <strong>{templates.name}</strong>
+                                {copy.templates.afterName}
                             </p>
                             <div className="space-y-4">
                                 <div className="space-y-1">
                                     <ExternalLink href={templates.member} prominent>
-                                        Create a token to use the team account
+                                        {copy.memberLink}
                                     </ExternalLink>
-                                    <p className="text-sm text-stone-600 dark:text-stone-400">
-                                        For chatting with an account someone else shared. Includes Actions and Issues
-                                        read and write; does not include Secrets access.
-                                    </p>
+                                    <p className="text-sm text-stone-600 dark:text-stone-400">{copy.memberHint}</p>
                                 </div>
                                 <div className="space-y-1">
                                     <ExternalLink href={templates.ownerSharing} prominent>
-                                        Create a token to share my Claude account
+                                        {copy.ownerLink}
                                     </ExternalLink>
-                                    <p className="text-sm text-stone-600 dark:text-stone-400">
-                                        For authorizing and sharing your own account, and chatting. Includes Actions,
-                                        Issues and Secrets read and write.
-                                    </p>
+                                    <p className="text-sm text-stone-600 dark:text-stone-400">{copy.ownerHint}</p>
                                 </div>
                             </div>
-                            <p className="text-sm text-stone-600 dark:text-stone-400">
-                                Organizations may require an administrator to approve new tokens.
-                            </p>
+                            <p className="text-sm text-stone-600 dark:text-stone-400">{copy.approvalHint}</p>
                         </>
                     )}
                 </Step>
-                <Step number={3} title="Paste the token and connect">
+                <Step number={3} label={copy.stepLabel(3)} title={copy.connectStep}>
                     <label className="block text-sm font-semibold">
-                        GitHub token
+                        {copy.tokenLabel}
                         <input
                             ref={token}
                             name="token"
@@ -101,11 +99,10 @@ export function ConnectionForm({
                         />
                     </label>
                     <p id={tokenHint} className="text-sm text-stone-600 dark:text-stone-400">
-                        The token is stored encrypted in this browser so you stay connected after a reload. Use
-                        Disconnect to remove it.
+                        {copy.tokenHint}
                     </p>
                     <Button type="submit" busy={busy}>
-                        Connect
+                        {copy.connect}
                     </Button>
                 </Step>
             </ol>
@@ -115,10 +112,13 @@ export function ConnectionForm({
 
 function Step({
     number,
+    label,
     title,
     children,
 }: {
     readonly number: number;
+    /** Read before the title by assistive technology, e.g. "Step 1: ". */
+    readonly label: string;
     readonly title: string;
     readonly children: ReactNode;
 }) {
@@ -132,7 +132,7 @@ function Step({
             </span>
             <div className="space-y-3">
                 <h3 className="pt-1 font-semibold">
-                    <span className="sr-only">Step {number}: </span>
+                    <span className="sr-only">{label}</span>
                     {title}
                 </h3>
                 {children}
