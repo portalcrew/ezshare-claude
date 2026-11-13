@@ -1,6 +1,5 @@
-import type * as v from "valibot";
 import type { Clock } from "../../shared/async.ts";
-import { SessionChannel } from "../../shared/channel.ts";
+import { type MessageSchema, SessionChannel } from "../../shared/channel.ts";
 import { createChannelKey, deriveChannelKeys } from "../../shared/channel-crypto.ts";
 import { AppError, isAccessDenied, toAppError } from "../../shared/errors.ts";
 import type { GitHubClient, GitHubUser, Repository, WorkflowRun } from "../../shared/github/client.ts";
@@ -71,8 +70,6 @@ export type SessionObservation<TChannel> =
     | { readonly kind: "queued"; readonly run: WorkflowRun }
     | { readonly kind: "running"; readonly run: WorkflowRun; readonly channel: TChannel | null }
     | { readonly kind: "finished"; readonly run: WorkflowRun; readonly channel: TChannel | null };
-
-type MessageSchema = v.GenericSchema<unknown, { readonly kind: string; readonly body: unknown }>;
 
 /** Locates and verifies the run serving a pending session and, once it has published its key, opens the channel. */
 export async function observeSession<TOutbound extends MessageSchema, TInbound extends MessageSchema>(

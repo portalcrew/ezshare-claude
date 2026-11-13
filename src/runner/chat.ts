@@ -13,8 +13,8 @@ import {
     requestIdSchema,
 } from "../shared/protocol.ts";
 import { agentCommand, runAgentCommand } from "./agent-process.ts";
-import { type ActionsContext, historyArchivePath, type StepEnvironment } from "./context.ts";
-import type { Diagnostics } from "./diagnostics.ts";
+import { type ActionsContext, agentWorkspace, historyArchivePath, type StepEnvironment } from "./context.ts";
+import { type Diagnostics, MORTY_ERROR_CODES } from "./diagnostics.ts";
 import { type HistoryOwner, latestSessionId, restoreHistory, saveHistory } from "./history-archive.ts";
 import { type ChatRunnerChannel, createChatChannel, type RunnerPorts, runSession } from "./session.ts";
 
@@ -25,6 +25,8 @@ const mortyReadySchema = v.object({
     url: v.pipe(v.string(), v.maxLength(8192)),
     accessExpiresAt: v.pipe(v.string(), v.isoTimestamp()),
 });
+
+const mortyErrorSchema = v.object({ error: v.object({ code: v.picklist(MORTY_ERROR_CODES) }) });
 
 /**
  * A member's personal Claude session: start Claude with the shared account in a fresh workspace, connect it to
@@ -159,8 +161,13 @@ async function archiveHistory(
     ports.diagnostics({ event: "session.stage", stage: "saving_history" });
     try {
         const signal = cleanupSignal(SAVE_TIMEOUT_MS);
-        const workspace = join(context.agent.home, "workspace");
-        const sessionId = await latestSessionId(context.agent, path, workspace, saving.sessionId, signal);
+        const sessionId = await latestSessionId(
+            context.agent,
+            path,
+            agentWorkspace(context.agent),
+            saving.sessionId,
+            signal,
+        );
         await saveHistory(archive, saving.key, owner, context.agent, path, sessionId, signal);
         await appendFile(context.githubOutput, "history=archived\n");
         return "archived";
@@ -196,7 +203,7 @@ class AgentSession {
         this.#context = context;
         this.#diagnostics = diagnostics;
         this.#path = path;
-        this.#workspace = join(context.agent.home, "workspace");
+        this.#workspace = agentWorkspace(context.agent);
         this.#variables = {
             TERM: "xterm-256color",
             BROWSER: "false",
@@ -276,21 +283,8 @@ class AgentSession {
                 failure: "morty_unavailable",
                 signal,
                 onFailure: ({ stdout, exitCode }) => {
-                    const errorSchema = v.object({
-                        error: v.object({
-                            code: v.picklist([
-                                "INVALID_REQUEST",
-                                "INVALID_RESPONSE",
-                                "HARNESS_UNAVAILABLE",
-                                "RUNTIME_START_FAILED",
-                                "SETUP_FAILED",
-                                "SETUP_TIMEOUT",
-                                "TIMEOUT",
-                            ]),
-                        }),
-                    });
                     for (const line of stdout.split("\n")) {
-                        const result = v.safeParse(errorSchema, safeJson(line.trim()));
+                        const result = v.safeParse(mortyErrorSchema, safeJson(line.trim()));
                         if (result.success) {
                             this.#diagnostics({ event: "morty.failed", code: result.output.error.code, exitCode });
                             return;

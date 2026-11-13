@@ -100,6 +100,14 @@ export function repositoryName(value: string): string {
     return normalized;
 }
 
+/** Validates a workflow run id before it becomes part of a request path. */
+function validRunId(runId: string): string {
+    if (!/^[1-9][0-9]{0,18}$/u.test(runId)) {
+        throw new AppError("invalid_input");
+    }
+    return runId;
+}
+
 function decode<const TSchema extends v.GenericSchema>(schema: TSchema, value: unknown): v.InferOutput<TSchema> {
     const parsed = v.safeParse(schema, value);
     if (!parsed.success) {
@@ -221,13 +229,14 @@ export class GitHubClient {
 
     readonly run = async (repository: string, runId: string, signal: AbortSignal): Promise<WorkflowRun> => {
         const name = repositoryName(repository);
-        if (!/^[1-9][0-9]{0,18}$/u.test(runId)) {
-            throw new AppError("invalid_input");
-        }
         return toRun(
             decode(
                 runSchema,
-                await this.#http.get(`/repos/${name}/actions/runs/${runId}`, signal, "actions_read_forbidden"),
+                await this.#http.get(
+                    `/repos/${name}/actions/runs/${validRunId(runId)}`,
+                    signal,
+                    "actions_read_forbidden",
+                ),
             ),
         );
     };
@@ -241,7 +250,7 @@ export class GitHubClient {
         const found = decode(
             artifactsSchema,
             await this.#http.get(
-                `/repos/${name}/actions/runs/${runId}/artifacts?per_page=${PAGE_SIZE}`,
+                `/repos/${name}/actions/runs/${validRunId(runId)}/artifacts?per_page=${PAGE_SIZE}`,
                 signal,
                 "actions_read_forbidden",
             ),
@@ -267,10 +276,12 @@ export class GitHubClient {
 
     readonly cancelRun = async (repository: string, runId: string, signal: AbortSignal): Promise<void> => {
         const name = repositoryName(repository);
-        if (!/^[1-9][0-9]{0,18}$/u.test(runId)) {
-            throw new AppError("invalid_input");
-        }
-        await this.#http.post(`/repos/${name}/actions/runs/${runId}/cancel`, {}, signal, "actions_write_forbidden");
+        await this.#http.post(
+            `/repos/${name}/actions/runs/${validRunId(runId)}/cancel`,
+            {},
+            signal,
+            "actions_write_forbidden",
+        );
     };
 
     readonly createIssue = async (

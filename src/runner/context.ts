@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { isAbsolute, normalize } from "node:path";
+import { isAbsolute, join, normalize } from "node:path";
 import * as v from "valibot";
 import { AppError } from "../shared/errors.ts";
 import { repositoryName } from "../shared/github/client.ts";
@@ -36,6 +36,11 @@ export interface ActionsContext {
     /** The step's `GITHUB_OUTPUT` file, which tells later steps whether to save the history archive. */
     readonly githubOutput: string;
     readonly agent: AgentAccount;
+}
+
+/** The directory where Claude and Morty work, inside the agent's home so it travels with the history. */
+export function agentWorkspace(account: AgentAccount): string {
+    return join(account.home, "workspace");
 }
 
 /** Where the cache steps restore and save a member's encrypted history; must match `chat.yml`. */

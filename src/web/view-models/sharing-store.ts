@@ -1,6 +1,6 @@
 import * as v from "valibot";
 import { createStore } from "zustand/vanilla";
-import { AppError, type ErrorCode, toAppError } from "../../shared/errors.ts";
+import { AppError, type ErrorCode } from "../../shared/errors.ts";
 import {
     authorizationCodeSchema,
     authorizationUrl,
@@ -12,7 +12,6 @@ import {
 } from "../../shared/protocol.ts";
 import { sealForGitHub } from "../services/secret-box.ts";
 import type { PendingSession } from "../services/vault.ts";
-import { SerialWork } from "./serial-work.ts";
 import {
     abandonSession,
     beginSession,
@@ -20,8 +19,11 @@ import {
     observeSession,
     sessionExpired,
 } from "./session-protocol.ts";
+import { StoreWorkflow } from "./store-workflow.ts";
 
 const POLL_MS = 3_000;
+
+const schemas = { outbound: loginBrowserMessageSchema, inbound: loginRunnerMessageSchema };
 
 export type SharingOutcome =
     | { readonly kind: "shared" }
@@ -62,10 +64,6 @@ export type SharingStore = ReturnType<typeof createSharingStore>;
  * channel and immediately store it as the repository secret. The token is never kept in browser storage.
  */
 export function createSharingStore(member: MemberContext) {
-    const work = new SerialWork();
-    let wake: AbortController | null = null;
-    const schemas = { outbound: loginBrowserMessageSchema, inbound: loginRunnerMessageSchema };
-
     return createStore<SharingState & SharingActions>()((set, get) => {
         const publish = async (session: PendingSession, token: string, signal: AbortSignal): Promise<void> => {
             const key = await member.github.secretPublicKey(member.repository.name, signal);
@@ -142,57 +140,25 @@ export function createSharingStore(member: MemberContext) {
             set({ phase: next, problem: null });
         };
 
-        const loop = async (signal: AbortSignal): Promise<void> => {
-            while (!signal.aborted) {
-                try {
-                    await work.run(synchronize);
-                } catch (cause) {
-                    const error = toAppError(cause);
-                    if (error.code === "cancelled") {
-                        return;
-                    }
-                    set({ problem: error.code });
-                }
-                wake = new AbortController();
-                try {
-                    await member.clock.sleep(POLL_MS, AbortSignal.any([signal, wake.signal]));
-                } catch {
-                    /* Woken early by a command, or closed. */
-                }
-            }
-        };
-
-        const command = (name: Exclude<SharingCommand, null>, task: (signal: AbortSignal) => Promise<void>) => {
-            if (get().command !== null || work.signal === null) {
-                return;
-            }
-            set({ command: name, commandError: null });
-            work.run(task).then(
-                () => {
-                    set({ command: null });
-                    wake?.abort();
-                },
-                (cause: unknown) => {
-                    const error = toAppError(cause);
-                    if (error.code !== "cancelled") {
-                        set({ command: null, commandError: error.code });
-                        wake?.abort();
-                    }
-                },
-            );
-        };
+        const workflow = new StoreWorkflow<Exclude<SharingCommand, null>>({
+            clock: member.clock,
+            synchronize,
+            interval: () => POLL_MS,
+            currentCommand: () => get().command,
+            reportProblem: (problem) => set({ problem }),
+            commandStarted: (command) => set({ command, commandError: null }),
+            commandFinished: (error) =>
+                set(error === null ? { command: null } : { command: null, commandError: error }),
+        });
+        const command = workflow.command;
 
         return {
             phase: { kind: "loading" },
             command: null,
             problem: null,
             commandError: null,
-            open: () => {
-                void loop(work.open());
-            },
-            close: () => {
-                work.close();
-            },
+            open: workflow.open,
+            close: workflow.close,
             start: () =>
                 command("start", async (signal) => {
                     const phase = get().phase;

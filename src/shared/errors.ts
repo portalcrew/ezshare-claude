@@ -1,13 +1,16 @@
 /** Authorization errors chosen by the GitHub operation that knows its required permission. */
-export type AccessDeniedCode =
-    | "forbidden"
-    | "actions_read_forbidden"
-    | "actions_write_forbidden"
-    | "issues_read_forbidden"
-    | "issues_write_forbidden"
-    | "secrets_read_forbidden"
-    | "secrets_write_forbidden"
-    | "contents_read_forbidden";
+const ACCESS_DENIED_CODES = [
+    "forbidden",
+    "actions_read_forbidden",
+    "actions_write_forbidden",
+    "issues_read_forbidden",
+    "issues_write_forbidden",
+    "secrets_read_forbidden",
+    "secrets_write_forbidden",
+    "contents_read_forbidden",
+] as const;
+
+export type AccessDeniedCode = (typeof ACCESS_DENIED_CODES)[number];
 
 /** Stable machine-readable failure codes shared by the browser and the Actions runner. */
 export type ErrorCode =
@@ -65,14 +68,5 @@ export function throwIfCancelled(signal: AbortSignal): void {
 
 /** Includes contextual GitHub denials while preserving the generic authorization error. */
 export function isAccessDenied(code: ErrorCode | null): boolean {
-    return (
-        code === "forbidden" ||
-        code === "actions_read_forbidden" ||
-        code === "actions_write_forbidden" ||
-        code === "issues_read_forbidden" ||
-        code === "issues_write_forbidden" ||
-        code === "secrets_read_forbidden" ||
-        code === "secrets_write_forbidden" ||
-        code === "contents_read_forbidden"
-    );
+    return ACCESS_DENIED_CODES.some((denied) => denied === code);
 }

@@ -4,7 +4,8 @@ import { AppError } from "./errors.ts";
 import type { GitHubClient } from "./github/client.ts";
 import { type ChannelBinding, type EnvelopeHeader, envelopeSchema, parseJson, type Sender } from "./protocol.ts";
 
-type MessageSchema = v.GenericSchema<unknown, { readonly kind: string; readonly body: unknown }>;
+/** The shape of every session message schema: a `kind` tag and its body. */
+export type MessageSchema = v.GenericSchema<unknown, { readonly kind: string; readonly body: unknown }>;
 type Kind<TSchema extends MessageSchema> = v.InferOutput<TSchema>["kind"];
 
 export type Received<TSchema extends MessageSchema> = v.InferOutput<TSchema> & { readonly sequence: number };
