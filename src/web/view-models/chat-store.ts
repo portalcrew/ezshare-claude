@@ -340,7 +340,9 @@ export function createChatStore(member: MemberContext) {
                     // Only a run the member owns, verified just now, can be cancelled from here.
                     const owned = await member.github.activeSessions(member.repository.name, member.user, signal);
                     if (phase.kind !== "busy" || !owned.some((run) => run.id === runId)) {
-                        throw new AppError("forbidden");
+                        // The last rendered run may have finished while the member was clicking End run.
+                        await synchronize(signal);
+                        return;
                     }
                     await member.github.cancelRun(member.repository.name, runId, signal);
                 }),

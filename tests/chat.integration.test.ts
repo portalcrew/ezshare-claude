@@ -191,3 +191,27 @@ test("Given a session still waiting for a runner, When the member cancels it, Th
     expect(app.actions.jobs.size).toBe(0);
     expect(queryByRole(body, "link", { name: /Open chat/u })).toBeNull();
 });
+
+test("Given an account-sharing run shown on the session page, When it finishes before the member clicks End run, Then the page returns to idle without claiming token permissions are missing", async () => {
+    app = await createTestApp();
+    const body = document.body;
+    app.actions.holdQueue();
+    await connect(app, tokens.olivia);
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Share your account" })));
+    await app.user.click(getByRole(body, "button", { name: "I understand, start authorization" }));
+    await app.eventually(() => getByRole(body, "button", { name: "Cancel" }));
+    await app.user.click(getByRole(body, "button", { name: "Use the team account" }));
+    const end = await app.eventually(() => getByRole(body, "button", { name: /^End run/u }));
+    const run = app.github.runs[0];
+    if (run === undefined) {
+        throw new Error("Expected the account-sharing run");
+    }
+    // GitHub finishes the run after the launcher renders its last confirmed status.
+    run.status = "completed";
+    run.conclusion = "success";
+    await app.user.click(end);
+    await app.eventually(() => getByRole(body, "button", { name: "Start a session" }));
+    expect(queryByRole(body, "alert")).toBeNull();
+    expect(queryByRole(body, "region", { name: "GitHub access needs attention" })).toBeNull();
+    expect(run.conclusion).toBe("success");
+});

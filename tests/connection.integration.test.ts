@@ -57,7 +57,7 @@ test("Given a fork configured with its own execution repository, When a member o
     const body = document.body;
     const field = await app.eventually(() => getByLabelText(body, "Repository"));
     expect(field).toHaveProperty("value", REPOSITORY);
-    const template = getByRole(body, "link", { name: /^Create a token \(/u }).getAttribute("href");
+    const template = getByRole(body, "link", { name: /Create a token to use the team account/u }).getAttribute("href");
     if (template === null) {
         throw new Error("Expected a token template for the fork");
     }
@@ -86,4 +86,22 @@ test("Given a token that can identify a member but cannot dispatch workflows, Wh
     await app.eventually(() => getByLabelText(body, "GitHub token"));
     expect(queryByRole(body, "button", { name: "Disconnect" })).toBeNull();
     expect(app.github.runs).toEqual([]);
+});
+
+test("Given a member connecting to a repository, When choosing how to use Claude, Then each clearly named token link includes the permissions for that task", async () => {
+    app = await createTestApp({ defaultRepository: REPOSITORY });
+    const body = document.body;
+    const memberLink = await app.eventually(() =>
+        getByRole(body, "link", { name: /Create a token to use the team account/u }),
+    );
+    const sharingLink = getByRole(body, "link", { name: /Create a token to share my Claude account/u });
+    const member = new URL(memberLink.getAttribute("href") ?? "");
+    const sharing = new URL(sharingLink.getAttribute("href") ?? "");
+    for (const url of [member, sharing]) {
+        expect(url.searchParams.get("target_name")).toBe("team");
+        expect(url.searchParams.get("actions")).toBe("write");
+        expect(url.searchParams.get("issues")).toBe("write");
+    }
+    expect(member.searchParams.has("secrets")).toBe(false);
+    expect(sharing.searchParams.get("secrets")).toBe("write");
 });

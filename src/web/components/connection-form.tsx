@@ -56,22 +56,32 @@ export function ConnectionForm({
                     ) : (
                         <>
                             <p className="text-sm">
-                                The link opens GitHub with <strong>{templates.owner}</strong> as the resource owner and
-                                Actions and Issues set to read and write. Under Repository access choose{" "}
-                                <strong>Only select repositories</strong> and pick <strong>{templates.name}</strong>.
+                                Choose what you want to do. Both links select <strong>{templates.owner}</strong> as the
+                                resource owner. Under Repository access choose <strong>Only select repositories</strong>{" "}
+                                and pick <strong>{templates.name}</strong>.
                             </p>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                                <ExternalLink href={templates.member} prominent>
-                                    Create a token
-                                </ExternalLink>
-                                <ExternalLink href={templates.ownerSharing}>
-                                    Create a token that can also share an account
-                                </ExternalLink>
+                            <div className="space-y-4">
+                                <div className="space-y-1">
+                                    <ExternalLink href={templates.member} prominent>
+                                        Create a token to use the team account
+                                    </ExternalLink>
+                                    <p className="text-sm text-stone-600 dark:text-stone-400">
+                                        For chatting with an account someone else shared. Includes Actions and Issues
+                                        read and write; does not include Secrets access.
+                                    </p>
+                                </div>
+                                <div className="space-y-1">
+                                    <ExternalLink href={templates.ownerSharing} prominent>
+                                        Create a token to share my Claude account
+                                    </ExternalLink>
+                                    <p className="text-sm text-stone-600 dark:text-stone-400">
+                                        For authorizing and sharing your own account, and chatting. Includes Actions,
+                                        Issues and Secrets read and write.
+                                    </p>
+                                </div>
                             </div>
                             <p className="text-sm text-stone-600 dark:text-stone-400">
-                                Sharing your Claude account additionally needs Secrets read and write. Members who only
-                                use the team account do not need it. Organizations may require an administrator to
-                                approve new tokens.
+                                Organizations may require an administrator to approve new tokens.
                             </p>
                         </>
                     )}
