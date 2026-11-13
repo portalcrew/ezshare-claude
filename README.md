@@ -12,7 +12,8 @@ Share one Claude Code account with your team while every member keeps a private 
 
 A member opens the launcher, connects with a fine-grained GitHub token and starts a session. GitHub Actions
 starts a fresh runner for that member, Claude Code runs there with the team's shared account, and Morty connects
-it to the member's browser. Sessions last up to one hour. Normal session shutdown encrypts the member's Claude
+it to the member's browser. Sessions last up to four hours and end early after 15 minutes without a new Claude
+turn, which frees the runner. Normal session shutdown, including an idle stop, encrypts the member's Claude
 conversation and workspace for the next session, under a key kept only in that browser. An unreadable archive
 is not overwritten unless the member chooses to replace it; clearing browser data loses its key. An account
 owner shares their Claude account once, from the same launcher.
