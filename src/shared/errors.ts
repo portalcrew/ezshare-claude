@@ -27,6 +27,7 @@ export type ErrorCode =
     | "unsafe_execution"
     | "session_busy"
     | "storage_unavailable"
+    | "history_key_missing"
     | "shared_account_missing"
     | "agent_failed"
     | "morty_unavailable"

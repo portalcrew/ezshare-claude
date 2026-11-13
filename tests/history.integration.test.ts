@@ -163,3 +163,33 @@ test("Given an older archive without Morty identity, When the member continues t
     expect(computer(continued.url)).toBe(computer(migrated.url));
     expect(continued.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
 });
+
+test("Given the launcher closes before unlocking history, When the key deadline expires, Then no new Computer is created and reopening explains how to retry", async () => {
+    app = await createTestApp();
+    const body = document.body;
+    app.actions.holdQueue();
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    await app.eventually(() => getByRole(body, "button", { name: "Cancel" }));
+    app.suspend();
+    app.actions.release();
+    const job = await app.eventually(() => {
+        const current = [...(app?.actions.jobs.values() ?? [])][0];
+        if (
+            current === undefined ||
+            !current.diagnostics.some(
+                (record) => record.event === "session.stage" && record.stage === "awaiting_history",
+            )
+        ) {
+            throw new Error("Expected the runner to wait for its browser key");
+        }
+        return current;
+    });
+    app.clock.advance(5 * 60_000);
+    await app.eventually(() => expect(job.error).toBe("history_key_missing"));
+    expect(app.actions.cache.size).toBe(0);
+    expect((await app.actions.agentLog(job.run.id)).some((entry) => entry.command === "setup")).toBe(false);
+    app.reload();
+    const alert = await app.eventually(() => getByRole(body, "alert"));
+    expect(alert.textContent).toContain("Keep this launcher open");
+});

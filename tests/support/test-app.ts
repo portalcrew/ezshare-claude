@@ -88,6 +88,10 @@ export async function createTestApp(
                 },
                 { timeout: 20_000, interval: 25 },
             ),
+        suspend: () => {
+            unmount();
+            unmount = () => undefined;
+        },
         reload: () => {
             unmount();
             document.body.innerHTML = '<main id="app"></main>';
