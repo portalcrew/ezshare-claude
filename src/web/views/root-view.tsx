@@ -2,7 +2,6 @@ import { useStore } from "zustand";
 import { ConnectionForm } from "../components/connection-form.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { Notice } from "../components/ui/notice.tsx";
-import { DEFAULT_REPOSITORY } from "../config.ts";
 import type { ApplicationStore, Page, Workspace } from "../view-models/application-store.ts";
 import { errorMessage, tokenTemplates } from "../view-models/copy.ts";
 import { ChatView } from "./chat-view.tsx";
@@ -13,7 +12,15 @@ const PAGES: readonly { readonly page: Page; readonly label: string }[] = [
     { page: "share", label: "Share your account" },
 ];
 
-export function RootView({ store, now }: { readonly store: ApplicationStore; readonly now: () => number }) {
+export function RootView({
+    store,
+    now,
+    defaultRepository,
+}: {
+    readonly store: ApplicationStore;
+    readonly now: () => number;
+    readonly defaultRepository: string;
+}) {
     const phase = useStore(store, (state) => state.phase);
     const page = useStore(store, (state) => state.page);
     const actions = store.getState();
@@ -47,7 +54,7 @@ export function RootView({ store, now }: { readonly store: ApplicationStore; rea
                     )}
                     {(phase.kind === "disconnected" || phase.kind === "connecting") && (
                         <ConnectionForm
-                            initialRepository={DEFAULT_REPOSITORY}
+                            initialRepository={defaultRepository}
                             templatesFor={tokenTemplates}
                             busy={phase.kind === "connecting"}
                             onConnect={actions.connect}
