@@ -1,7 +1,7 @@
 {
     "name": "ezshare-claude-agent-tools",
     "private": true,
-    "description": "Claude Code installed on session runners with npm ci. Morty runs through npx @morty-build/cli@latest.",
+    "description": "Claude Code installed on session runners with npm ci. Morty runs through npx @portalcrew/morty@latest.",
     "dependencies": {
         "@anthropic-ai/claude-code": "2.1.323"
     }

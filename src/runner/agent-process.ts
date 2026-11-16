@@ -65,7 +65,11 @@ export function runAgentCommand(
         readonly timeout: number;
         readonly failure: ErrorCode;
         readonly signal: AbortSignal;
-        readonly onFailure?: (result: { readonly stdout: string; readonly exitCode: number | null }) => void;
+        readonly onFailure?: (result: {
+            readonly stdout: string;
+            readonly stderr: string;
+            readonly exitCode: number | null;
+        }) => void;
     },
 ): Promise<string> {
     return withDeadline(
@@ -77,13 +81,14 @@ export function runAgentCommand(
                     command.command,
                     [...command.args],
                     { cwd: "/", env: command.env, signal, maxBuffer: 2_000_000, killSignal: "SIGTERM" },
-                    (error, stdout) => {
+                    (error, stdout, stderr) => {
                         if (error === null) {
                             resolve(stdout);
                         } else {
                             if (!signal.aborted) {
                                 options.onFailure?.({
                                     stdout,
+                                    stderr,
                                     exitCode: typeof error.code === "number" ? error.code : null,
                                 });
                             }

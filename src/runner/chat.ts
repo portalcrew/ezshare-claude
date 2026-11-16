@@ -298,7 +298,7 @@ class AgentSession {
                 "npx",
                 [
                     "--yes",
-                    "@morty-build/cli@latest",
+                    "@portalcrew/morty@latest",
                     "setup",
                     "--base-url",
                     "https://morty.build",
@@ -318,8 +318,8 @@ class AgentSession {
                 timeout: 240_000,
                 failure: "morty_unavailable",
                 signal,
-                onFailure: ({ stdout, exitCode }) => {
-                    for (const line of stdout.split("\n")) {
+                onFailure: ({ stdout, stderr, exitCode }) => {
+                    for (const line of [...stdout.split("\n"), ...stderr.split("\n")]) {
                         const result = v.safeParse(mortyErrorSchema, safeJson(line.trim()));
                         if (result.success) {
                             this.#diagnostics({ event: "morty.failed", code: result.output.error.code, exitCode });
@@ -400,7 +400,7 @@ class AgentSession {
                     this.#path,
                     this.#workspace,
                     "npx",
-                    ["--yes", "@morty-build/cli@latest", "stop"],
+                    ["--yes", "@portalcrew/morty@latest", "stop"],
                     this.#variables,
                 ),
                 { timeout: 15_000, failure: "morty_unavailable", signal: cleanupSignal(20_000) },

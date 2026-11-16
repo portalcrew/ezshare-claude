@@ -220,7 +220,7 @@ test("Given an account-sharing run shown on the session page, When it finishes b
     expect(run.conclusion).toBe("success");
 });
 
-test("Given Morty rejects setup, When a member starts a session, Then she sees one failure and public diagnostics contain only the safe error code", async () => {
+test("Given Morty reports a setup failure on stderr, When a member starts a session, Then she sees one failure and public diagnostics contain only the safe error code", async () => {
     app = await createTestApp({ mortyFailure: true });
     const body = document.body;
     await connect(app, tokens.alice);

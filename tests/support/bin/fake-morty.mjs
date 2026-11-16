@@ -3,7 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from "node:path";
 
 const invocation = process.argv.slice(2);
-if (invocation[0] !== "--yes" || invocation[1] !== "@morty-build/cli@latest") {
+if (invocation[0] !== "--yes" || invocation[1] !== "@portalcrew/morty@latest") {
     console.error("Expected npx to execute the latest Morty CLI");
     process.exit(2);
 }
@@ -17,7 +17,7 @@ const value = (name) => args[args.indexOf(name) + 1];
 
 if (args[0] === "setup") {
     if (existsSync(join(process.env.HOME, ".morty-failure"))) {
-        console.log(
+        console.error(
             JSON.stringify({
                 error: {
                     code: "INVALID_REQUEST",
