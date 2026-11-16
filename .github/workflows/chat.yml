@@ -17,6 +17,12 @@ on:
         type: string
         required: true
 
+      reset_morty_identity:
+        description: Delete local Morty state and create a new Computer, keeping Claude history and workspace
+        type: boolean
+        default: false
+        required: false
+
 permissions:
   contents: read
   actions: read

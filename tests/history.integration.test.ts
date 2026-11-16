@@ -193,3 +193,42 @@ test("Given the launcher closes before unlocking history, When the key deadline 
     const alert = await app.eventually(() => getByRole(body, "alert"));
     expect(alert.textContent).toContain("Keep this launcher open");
 });
+
+test("Given saved conversation and Morty identity, When the member chooses a new Morty identity and starts, Then only Morty state is replaced and the next session keeps the new identity", async () => {
+    app = await createTestApp();
+    await connect(app, tokens.alice);
+    const first = await runSession(app);
+    await endSession(app);
+    const checkbox = getByRole(document.body, "checkbox", { name: "Use a new Morty identity" });
+    expect(getByRole(document.body, "checkbox", { name: "Use a new Morty identity", checked: false })).toBe(checkbox);
+    await app.user.click(checkbox);
+    app.actions.holdQueue();
+    await app.user.click(getByRole(document.body, "button", { name: "Start a session" }));
+    const dispatched = await app.eventually(() => {
+        const run = app?.github.runs.at(-1);
+        if (run === undefined || run.id === first.runId) {
+            throw new Error("Expected the new session");
+        }
+        return run;
+    });
+    app.reload();
+    app.actions.release();
+    const link = await app.eventually(() => getByRole(document.body, "link", { name: /Open chat/u }));
+    const second = { url: new URL(link.getAttribute("href") ?? ""), runId: dispatched.id };
+    expect(computer(second.url)).not.toBe(computer(first.url));
+    expect(second.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
+    const job = app.actions.jobs.get(second.runId);
+    if (job === undefined) {
+        throw new Error("Expected the session job");
+    }
+    expect(await readFile(join(job.agentHome, "workspace", "notes.txt"), "utf8")).toBe(
+        "kept between sessions\nkept between sessions\n",
+    );
+    expect(await readFile(join(job.agentHome, "morty", "computer", "sessions", "events.jsonl"), "utf8")).toBe(
+        '{"text":"turn via morty"}\n',
+    );
+    await endSession(app);
+    const third = await runSession(app);
+    expect(computer(third.url)).toBe(computer(second.url));
+    expect(third.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
+});

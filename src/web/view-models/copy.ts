@@ -214,6 +214,9 @@ export const chatCopy = {
     replacingHistory:
         "Your next session starts with an empty history and saves it in place of the one this browser cannot read.",
     start: "Start a session",
+    newMortyIdentity: "Use a new Morty identity",
+    newMortyIdentityHint:
+        "Deletes this session’s restored Morty state and creates a new Computer. Your Claude conversation and workspace are kept. Previous Morty links will not connect to this new session.",
     busyTitle: "You already have a session running",
     busyBody: "Only one session per member can run at a time. End it before starting another.",
     endRun: (id: string) => `End run ${id}`,

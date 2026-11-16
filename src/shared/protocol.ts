@@ -38,6 +38,7 @@ export const dispatchInputsSchema = v.object({
     request_id: requestIdSchema,
     issue: v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,15}$/u)),
     client_key: channelKeySchema,
+    reset_morty_identity: v.optional(v.picklist(["true", "false"])),
 });
 export type DispatchInputs = Readonly<v.InferOutput<typeof dispatchInputsSchema>>;
 

@@ -27,6 +27,7 @@ export async function beginSession(
     member: MemberContext,
     purpose: Purpose,
     signal: AbortSignal,
+    options: { readonly newMortyIdentity?: boolean } = {},
 ): Promise<PendingSession> {
     const key = await createChannelKey();
     const requestId = crypto.randomUUID();
@@ -50,7 +51,14 @@ export async function beginSession(
         await member.github.dispatch(
             member.repository,
             purpose,
-            { request_id: requestId, issue: String(issue), client_key: key.publicKey },
+            {
+                request_id: requestId,
+                issue: String(issue),
+                client_key: key.publicKey,
+                ...(purpose === "chat" && options.newMortyIdentity === true
+                    ? { reset_morty_identity: "true" as const }
+                    : {}),
+            },
             signal,
         );
     } catch (cause) {

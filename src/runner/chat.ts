@@ -102,6 +102,10 @@ export async function runChat(
                         if (start !== "unreadable") {
                             saving = { key: request.key, sessionId };
                         }
+                        if (context.inputs.reset_morty_identity === "true") {
+                            ports.diagnostics({ event: "session.stage", stage: "resetting_morty_identity" });
+                            await agent.resetMortyIdentity(bounded);
+                        }
                         ports.diagnostics({ event: "session.stage", stage: "connecting_morty" });
                         const ready = await agent.connectMorty(sessionId, bounded);
                         await channel.send({ kind: "ready", body: { ...ready, history: start } }, bounded);
@@ -294,6 +298,21 @@ class AgentSession {
                 this.#variables,
             ),
             { timeout: 10_000, failure: "agent_failed", signal },
+        );
+    };
+
+    /** Removes only the dedicated Morty directory, as the agent, after its home has been restored. */
+    readonly resetMortyIdentity = async (signal: AbortSignal): Promise<void> => {
+        await runAgentCommand(
+            await agentCommand(
+                this.#context.agent,
+                this.#path,
+                this.#context.agent.home,
+                "rm",
+                ["-rf", "--", join(this.#context.agent.home, "morty")],
+                {},
+            ),
+            { timeout: 30_000, failure: "morty_unavailable", signal },
         );
     };
 

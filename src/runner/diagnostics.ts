@@ -106,6 +106,7 @@ export type DiagnosticRecord =
               | "verified_history"
               | "saving_history"
               | "starting_agent"
+              | "resetting_morty_identity"
               | "connecting_morty"
               | "ready"
               | "idle"

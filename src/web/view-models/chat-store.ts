@@ -64,12 +64,14 @@ export interface ChatState {
     readonly commandError: ErrorCode | null;
     /** The next session will save its history over an archive this browser cannot read. */
     readonly replacingHistory: boolean;
+    readonly newMortyIdentity: boolean;
 }
 
 export interface ChatActions {
     readonly open: () => void;
     readonly close: () => void;
     readonly start: () => void;
+    readonly setNewMortyIdentity: (selected: boolean) => void;
     readonly stop: () => void;
     readonly forceStop: () => void;
     readonly cancelRun: (runId: string) => void;
@@ -230,6 +232,12 @@ export function createChatStore(member: MemberContext) {
             problem: null,
             commandError: null,
             replacingHistory: false,
+            newMortyIdentity: false,
+            setNewMortyIdentity: (selected) => {
+                if (get().phase.kind === "idle" && get().command === null) {
+                    set({ newMortyIdentity: selected });
+                }
+            },
             open: workflow.open,
             close: workflow.close,
             refresh: workflow.refresh,
@@ -242,9 +250,11 @@ export function createChatStore(member: MemberContext) {
                     if ((await member.github.activeSessions(member.repository.name, member.user, signal)).length > 0) {
                         throw new AppError("session_busy");
                     }
+                    const newMortyIdentity = get().newMortyIdentity;
                     set({ phase: { kind: "starting" } });
                     try {
-                        set({ phase: { kind: "queued", session: await beginSession(member, "chat", signal) } });
+                        const session = await beginSession(member, "chat", signal, { newMortyIdentity });
+                        set({ phase: { kind: "queued", session }, newMortyIdentity: false });
                     } catch (cause) {
                         set({ phase });
                         throw cause;

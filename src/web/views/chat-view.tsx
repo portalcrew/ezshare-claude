@@ -23,6 +23,7 @@ export function ChatView({
     const command = useStore(store, (state) => state.command);
     const problem = useStore(store, (state) => state.problem);
     const commandError = useStore(store, (state) => state.commandError);
+    const newMortyIdentity = useStore(store, (state) => state.newMortyIdentity);
     const replacingHistory = useStore(store, (state) => state.replacingHistory);
     const actions = store.getState();
 
@@ -58,6 +59,27 @@ export function ChatView({
                                 {phase.outcome !== null && <OutcomeNotice outcome={phase.outcome} />}
                                 <p className="text-sm">{chatCopy.intro}</p>
                                 {replacingHistory && <Notice tone="info">{chatCopy.replacingHistory}</Notice>}
+                                <div className="space-y-1">
+                                    <label className="flex items-center gap-2 text-sm">
+                                        <input
+                                            type="checkbox"
+                                            checked={newMortyIdentity}
+                                            disabled={command !== null}
+                                            aria-describedby="new-morty-identity-hint"
+                                            onChange={(event) =>
+                                                actions.setNewMortyIdentity(event.currentTarget.checked)
+                                            }
+                                            className="size-4 accent-emerald-700"
+                                        />
+                                        {chatCopy.newMortyIdentity}
+                                    </label>
+                                    <p
+                                        id="new-morty-identity-hint"
+                                        className="text-sm text-stone-600 dark:text-stone-400"
+                                    >
+                                        {chatCopy.newMortyIdentityHint}
+                                    </p>
+                                </div>
                                 <Button busy={command === "start"} onClick={actions.start}>
                                     {chatCopy.start}
                                 </Button>
