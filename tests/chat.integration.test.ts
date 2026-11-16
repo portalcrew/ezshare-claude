@@ -221,7 +221,7 @@ test("Given an account-sharing run shown on the session page, When it finishes b
 });
 
 test("Given Morty reports a setup failure on stderr, When a member starts a session, Then she sees one failure and public diagnostics contain only the safe error code", async () => {
-    app = await createTestApp({ mortyFailure: true });
+    app = await createTestApp({ mortyFailure: "provider" });
     const body = document.body;
     await connect(app, tokens.alice);
     await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
@@ -280,4 +280,52 @@ test("Given the runner image points XDG_CONFIG_HOME at the runner's home, When C
     for (const entry of agentLog) {
         expect(entry.configHome).toBe(`${job.agentHome}/.config`);
     }
+});
+
+test("Given npm rejects the workspace configuration, When a member starts a session, Then public diagnostics contain its safe structured code without workspace details", async () => {
+    app = await createTestApp({ mortyFailure: "npm" });
+    const body = document.body;
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    await app.eventually(() => getByRole(body, "alert"));
+    const job = [...app.actions.jobs.values()][0];
+    if (job === undefined) {
+        throw new Error("Expected the session job");
+    }
+    await job.done;
+    expect(job.diagnostics).toContainEqual({ event: "morty.failed", code: "EJSONPARSE", exitCode: 1 });
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-workspace-detail");
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-code");
+});
+
+test("Given npm latest temporarily refers to an unavailable version, When a member starts a session, Then setup retries and opens the private chat", async () => {
+    app = await createTestApp({ mortyFailure: "npm-transient" });
+    const body = document.body;
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    await app.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
+    const job = [...app.actions.jobs.values()][0];
+    if (job === undefined) {
+        throw new Error("Expected the session job");
+    }
+    expect(job.diagnostics).toContainEqual({ event: "morty.retrying", code: "ETARGET", attempt: 1 });
+    expect(queryByRole(body, "alert")).toBeNull();
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-workspace-detail");
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-code");
+});
+
+test("Given npm latest stays unavailable, When setup exhausts its bounded retries, Then the member sees a failure and public diagnostics identify npm", async () => {
+    app = await createTestApp({ mortyFailure: "npm-unavailable" });
+    const body = document.body;
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    await app.eventually(() => getByRole(body, "alert"));
+    const job = [...app.actions.jobs.values()][0];
+    if (job === undefined) {
+        throw new Error("Expected the session job");
+    }
+    await job.done;
+    expect(job.diagnostics).toContainEqual({ event: "morty.failed", code: "ETARGET", exitCode: 1 });
+    expect(job.diagnostics.filter((record) => record.event === "morty.retrying")).toHaveLength(2);
+    expect(queryByRole(body, "link", { name: /Open chat/u })).toBeNull();
 });

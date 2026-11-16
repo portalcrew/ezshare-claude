@@ -1,22 +1,57 @@
 // Controlled stand-in for npx executing the current Morty CLI: setup NDJSON output and stop.
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const invocation = process.argv.slice(2);
-if (invocation[0] !== "--yes" || invocation[1] !== "@portalcrew/morty@latest") {
+if (
+    invocation[0] !== "--yes" ||
+    invocation[1] !== "--prefer-online" ||
+    invocation[2] !== "--json" ||
+    invocation[3] !== "@portalcrew/morty@latest"
+) {
     console.error("Expected npx to execute the latest Morty CLI");
     process.exit(2);
 }
-const args = invocation.slice(2);
+const args = invocation.slice(4);
 const log = `${process.env.HOME ?? "/nonexistent"}.agent-env.jsonl`;
 appendFileSync(
     log,
-    `${JSON.stringify({ program: "npx", package: invocation[1], command: args[0], names: Object.keys(process.env).sort(), configHome: process.env.XDG_CONFIG_HOME ?? null })}\n`,
+    `${JSON.stringify({ program: "npx", package: invocation[3], command: args[0], names: Object.keys(process.env).sort(), configHome: process.env.XDG_CONFIG_HOME ?? null })}\n`,
 );
 const value = (name) => args[args.indexOf(name) + 1];
 
 if (args[0] === "setup") {
     if (existsSync(join(process.env.HOME, ".morty-failure"))) {
+        const failure = readFileSync(join(process.env.HOME, ".morty-failure"), "utf8");
+        if (failure === "npm-transient" || failure === "npm-unavailable") {
+            if (failure === "npm-transient") {
+                unlinkSync(join(process.env.HOME, ".morty-failure"));
+            }
+            console.log(
+                JSON.stringify(
+                    { error: { code: "ETARGET", summary: "private-workspace-detail", detail: "private-code" } },
+                    null,
+                    2,
+                ),
+            );
+            process.exit(1);
+        }
+        if (failure === "npm") {
+            console.log(
+                JSON.stringify(
+                    {
+                        error: {
+                            code: "EJSONPARSE",
+                            summary: "private-workspace-detail",
+                            detail: "https://morty.build/continue#code=private-code",
+                        },
+                    },
+                    null,
+                    2,
+                ),
+            );
+            process.exit(1);
+        }
         console.error(
             JSON.stringify({
                 error: {

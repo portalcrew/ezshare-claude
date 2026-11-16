@@ -1,7 +1,7 @@
 import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as v from "valibot";
-import { cleanupSignal, withDeadline } from "../shared/async.ts";
+import { type Clock, cleanupSignal, withDeadline } from "../shared/async.ts";
 import { AppError, toAppError } from "../shared/errors.ts";
 import {
     CHAT_IDLE_STOP_MS,
@@ -15,7 +15,7 @@ import {
 } from "../shared/protocol.ts";
 import { agentCommand, runAgentCommand } from "./agent-process.ts";
 import { type ActionsContext, agentWorkspace, historyArchivePath, type StepEnvironment } from "./context.ts";
-import { type Diagnostics, MORTY_ERROR_CODES } from "./diagnostics.ts";
+import { type Diagnostics, MORTY_ERROR_CODES, type MortyFailureCode, NPM_ERROR_CODES } from "./diagnostics.ts";
 import { claudeProject, type HistoryOwner, latestSessionId, restoreHistory, saveHistory } from "./history-archive.ts";
 import { type ChatRunnerChannel, createChatChannel, type RunnerPorts, runSession } from "./session.ts";
 
@@ -27,7 +27,9 @@ const mortyReadySchema = v.object({
     accessExpiresAt: v.pipe(v.string(), v.isoTimestamp()),
 });
 
-const mortyErrorSchema = v.object({ error: v.object({ code: v.picklist(MORTY_ERROR_CODES) }) });
+const mortyErrorSchema = v.object({
+    error: v.object({ code: v.picklist([...MORTY_ERROR_CODES, ...NPM_ERROR_CODES]) }),
+});
 
 /**
  * A member's personal Claude session: start Claude with the shared account in a fresh workspace, connect it to
@@ -49,7 +51,7 @@ export async function runChat(
                 throw new AppError("shared_account_missing");
             }
             const path = environment["PATH"] ?? "";
-            const agent = new AgentSession(context, path, token, ports.diagnostics);
+            const agent = new AgentSession(context, path, token, ports.diagnostics, ports.clock);
             const owner = { repository: context.repository, userId: context.userId };
             const archive = historyArchivePath(context.runnerTemp);
             // Set only once the agent's home holds exactly what may be saved over the member's archive.
@@ -218,8 +220,10 @@ class AgentSession {
     readonly #variables: Readonly<Record<string, string>>;
     readonly #workspace: string;
     readonly #diagnostics: Diagnostics;
+    readonly #clock: Clock;
 
-    constructor(context: ActionsContext, path: string, token: string, diagnostics: Diagnostics) {
+    constructor(context: ActionsContext, path: string, token: string, diagnostics: Diagnostics, clock: Clock) {
+        this.#clock = clock;
         this.#context = context;
         this.#diagnostics = diagnostics;
         this.#path = path;
@@ -290,45 +294,63 @@ class AgentSession {
         sessionId: string,
         signal: AbortSignal,
     ): Promise<{ readonly url: string; readonly accessExpiresAt: string }> => {
-        const output = await runAgentCommand(
-            await agentCommand(
-                this.#context.agent,
-                this.#path,
+        const command = await agentCommand(
+            this.#context.agent,
+            this.#path,
+            this.#workspace,
+            "npx",
+            [
+                "--yes",
+                "--prefer-online",
+                "--json",
+                "@portalcrew/morty@latest",
+                "setup",
+                "--base-url",
+                "https://morty.build",
+                "--cwd",
                 this.#workspace,
-                "npx",
-                [
-                    "--yes",
-                    "@portalcrew/morty@latest",
-                    "setup",
-                    "--base-url",
-                    "https://morty.build",
-                    "--cwd",
-                    this.#workspace,
-                    "--harness",
-                    "claude",
-                    "--session-id",
-                    sessionId,
-                    // Morty offers 1h, 1d, 7d or 30d; the session itself ends within its lifetime.
-                    "--device-access",
-                    "1d",
-                ],
-                this.#variables,
-            ),
-            {
-                timeout: 240_000,
-                failure: "morty_unavailable",
-                signal,
-                onFailure: ({ stdout, stderr, exitCode }) => {
-                    for (const line of [...stdout.split("\n"), ...stderr.split("\n")]) {
-                        const result = v.safeParse(mortyErrorSchema, safeJson(line.trim()));
-                        if (result.success) {
-                            this.#diagnostics({ event: "morty.failed", code: result.output.error.code, exitCode });
-                            return;
+                "--harness",
+                "claude",
+                "--session-id",
+                sessionId,
+                // Morty offers 1h, 1d, 7d or 30d; the session itself ends within its lifetime.
+                "--device-access",
+                "1d",
+            ],
+            this.#variables,
+        );
+        const output = await withDeadline(
+            240_000,
+            signal,
+            async (bounded) => {
+                for (let attempt = 1; ; attempt += 1) {
+                    const failures: { readonly code: MortyFailureCode; readonly exitCode: number | null }[] = [];
+                    try {
+                        return await runAgentCommand(command, {
+                            timeout: 240_000,
+                            failure: "morty_unavailable",
+                            signal: bounded,
+                            onFailure: ({ stdout, stderr, exitCode }) => {
+                                failures.push({ code: mortyFailureCode(stdout, stderr), exitCode });
+                            },
+                        });
+                    } catch (cause) {
+                        const failure = failures.at(-1);
+                        if (bounded.aborted || failure === undefined) {
+                            throw cause;
                         }
+                        // A moving latest tag can precede its version's availability. Retry installation only;
+                        // never replace a saved Computer or retry a Morty identity/authentication failure.
+                        if (failure.code !== "ETARGET" || attempt >= 3) {
+                            this.#diagnostics({ event: "morty.failed", ...failure });
+                            throw cause;
+                        }
+                        this.#diagnostics({ event: "morty.retrying", code: "ETARGET", attempt });
+                        await this.#clock.sleep(15_000, bounded);
                     }
-                    this.#diagnostics({ event: "morty.failed", code: "UNRECOGNIZED", exitCode });
-                },
+                }
             },
+            this.#clock,
         );
         for (const line of output.split("\n")) {
             const ready = v.safeParse(mortyReadySchema, safeJson(line.trim()));
@@ -400,7 +422,7 @@ class AgentSession {
                     this.#path,
                     this.#workspace,
                     "npx",
-                    ["--yes", "@portalcrew/morty@latest", "stop"],
+                    ["--yes", "--prefer-online", "--json", "@portalcrew/morty@latest", "stop"],
                     this.#variables,
                 ),
                 { timeout: 15_000, failure: "morty_unavailable", signal: cleanupSignal(20_000) },
@@ -420,4 +442,15 @@ function safeJson(text: string): unknown {
     } catch {
         return null;
     }
+}
+
+/** npm emits a whole JSON document; Morty emits one JSON document per line. Discard all private fields. */
+function mortyFailureCode(stdout: string, stderr: string): MortyFailureCode {
+    for (const candidate of [stdout, stderr, ...stdout.split("\n"), ...stderr.split("\n")]) {
+        const parsed = v.safeParse(mortyErrorSchema, safeJson(candidate.trim()));
+        if (parsed.success) {
+            return parsed.output.error.code;
+        }
+    }
+    return "UNRECOGNIZED";
 }

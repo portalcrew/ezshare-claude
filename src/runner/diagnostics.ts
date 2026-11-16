@@ -15,6 +15,25 @@ export const MORTY_ERROR_CODES = [
     "TIMEOUT",
 ] as const;
 
+/** npm failures are separate from Morty failures: installation can fail before the CLI runs. */
+export const NPM_ERROR_CODES = [
+    "ETARGET",
+    "E404",
+    "EJSONPARSE",
+    "E401",
+    "E403",
+    "EACCES",
+    "EPERM",
+    "EBADENGINE",
+    "EUNSUPPORTEDPROTOCOL",
+    "EOVERRIDE",
+    "ENOTFOUND",
+    "ECONNRESET",
+    "ETIMEDOUT",
+] as const;
+
+export type MortyFailureCode = (typeof MORTY_ERROR_CODES)[number] | (typeof NPM_ERROR_CODES)[number] | "UNRECOGNIZED";
+
 /**
  * Structured progress written to the public workflow log. Records carry stages and codes only, never tokens,
  * links, authorization codes or conversation content.
@@ -39,14 +58,11 @@ export type DiagnosticRecord =
               | "stopping"
               | "closed";
       }
+    | { readonly event: "morty.retrying"; readonly code: "ETARGET"; readonly attempt: number }
     | { readonly event: "session.failed"; readonly code: ErrorCode }
     | {
           readonly event: "morty.failed";
-          readonly code:
-              | (typeof MORTY_ERROR_CODES)[number]
-              | "UNRECOGNIZED"
-              | "HANDOFF_MISMATCH"
-              | "READY_OUTPUT_INVALID";
+          readonly code: MortyFailureCode | "HANDOFF_MISMATCH" | "READY_OUTPUT_INVALID";
           readonly exitCode: number | null;
       };
 

@@ -30,7 +30,7 @@ export async function startFakeActions(
     options: {
         readonly repository: string;
         readonly clock: TestClock;
-        readonly mortyFailure?: boolean;
+        readonly mortyFailure?: "provider" | "npm" | "npm-transient" | "npm-unavailable";
         readonly mortyHandoff?: "legacy" | "encrypted" | "conflicting";
         readonly sharedToken: () => string | null;
     },
@@ -67,8 +67,8 @@ export async function startFakeActions(
         if (options.mortyHandoff === "legacy") {
             await writeFile(join(job.agentHome, ".morty-legacy-handoff"), "legacy");
         }
-        if (options.mortyFailure === true) {
-            await writeFile(join(job.agentHome, ".morty-failure"), "INVALID_REQUEST");
+        if (options.mortyFailure !== undefined) {
+            await writeFile(join(job.agentHome, ".morty-failure"), options.mortyFailure);
         }
         const output = join(directory, "github-output");
         await writeFile(output, "");

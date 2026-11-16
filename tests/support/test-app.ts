@@ -28,7 +28,7 @@ export async function createTestApp(
         readonly defaultRepository?: string;
         readonly branchProtected?: boolean;
         readonly sharedToken?: string | null;
-        readonly mortyFailure?: boolean;
+        readonly mortyFailure?: "provider" | "npm" | "npm-transient" | "npm-unavailable";
         readonly mortyHandoff?: "legacy" | "encrypted" | "conflicting";
     } = {},
 ) {
