@@ -23,6 +23,33 @@ const value = (name) => args[args.indexOf(name) + 1];
 if (args[0] === "setup") {
     if (existsSync(join(process.env.HOME, ".morty-failure"))) {
         const failure = readFileSync(join(process.env.HOME, ".morty-failure"), "utf8");
+        if (failure === "runtime-revoked" || failure === "relay-transient" || failure === "relay-unavailable") {
+            if (failure === "relay-transient") {
+                unlinkSync(join(process.env.HOME, ".morty-failure"));
+            }
+            console.log(
+                JSON.stringify({ status: "runtime_retrying", failure: { message: "private-provider-detail" } }),
+            );
+            console.log(
+                JSON.stringify({
+                    error: {
+                        code: failure === "runtime-revoked" ? "RUNTIME_START_FAILED" : "RELAY_UNAVAILABLE",
+                        message: "private-provider-detail",
+                        cause: {
+                            name: "RuntimeStartError",
+                            code: "RUNTIME_START_FAILED",
+                            cause: {
+                                name: "ComputerPairingRevokedError",
+                                code: failure === "runtime-revoked" ? "computer_pairing_revoked" : "ECONNRESET",
+                                message: "https://morty.build/continue#code=private-code",
+                                cause: { code: "private-code", message: "private-provider-detail" },
+                            },
+                        },
+                    },
+                }),
+            );
+            process.exit(1);
+        }
         if (failure === "npm-text") {
             console.error(
                 "npm error code EACCES\nnpm error private-provider-detail https://morty.build/continue#code=private-code",

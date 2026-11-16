@@ -17,7 +17,9 @@ import { agentCommand, runAgentCommand } from "./agent-process.ts";
 import { type ActionsContext, agentWorkspace, historyArchivePath, type StepEnvironment } from "./context.ts";
 import {
     type Diagnostics,
+    MORTY_CAUSE_CODES,
     MORTY_ERROR_CODES,
+    MORTY_RETRY_CODES,
     type MortyFailureCode,
     type MortyOutputFormat,
     NPM_ERROR_CODES,
@@ -358,6 +360,7 @@ class AgentSession {
                             signal: bounded,
                             onFailure: ({ stdout, stderr, exitCode }) => {
                                 failures.push({ code: mortyFailureCode(stdout, stderr), exitCode });
+                                reportMortyCauses(stdout, stderr, this.#diagnostics);
                                 this.#diagnostics({
                                     event: "morty.output",
                                     stdout: mortyOutputFormat(stdout),
@@ -372,9 +375,10 @@ class AgentSession {
                         }
                         // npm can accept a publish before its metadata and archive are available everywhere.
                         // E404 gets up to 165 seconds of waits within the shared four-minute startup deadline.
-                        // Retry installation only; never replace a Computer or retry Morty authentication failures.
+                        // Setup persists pairing request identities, so transient service failures can resume safely.
+                        // Authentication and revoked credentials require their owning recovery flow.
                         if (
-                            (failure.code !== "ETARGET" && failure.code !== "E404") ||
+                            !v.is(v.picklist(MORTY_RETRY_CODES), failure.code) ||
                             attempt >= (failure.code === "E404" ? 12 : 3)
                         ) {
                             this.#diagnostics({ event: "morty.failed", ...failure });
@@ -476,6 +480,29 @@ function safeJson(text: string): unknown {
         return parseJson(text);
     } catch {
         return null;
+    }
+}
+
+function reportMortyCauses(stdout: string, stderr: string, diagnostics: Diagnostics): void {
+    const envelope = v.object({ error: v.unknown() });
+    const node = v.object({ code: v.optional(v.unknown()), cause: v.optional(v.unknown()) });
+    for (const candidate of [stdout, stderr, ...stdout.split("\n"), ...stderr.split("\n")]) {
+        const parsed = v.safeParse(envelope, safeJson(candidate.trim()));
+        if (!parsed.success) {
+            continue;
+        }
+        let current: unknown = parsed.output.error;
+        for (let depth = 0; depth < 6; depth += 1) {
+            const result = v.safeParse(node, current);
+            if (!result.success) {
+                break;
+            }
+            if (depth > 0 && v.is(v.picklist(MORTY_CAUSE_CODES), result.output.code)) {
+                diagnostics({ event: "morty.cause", code: result.output.code, depth });
+            }
+            current = result.output.cause;
+        }
+        return;
     }
 }
 

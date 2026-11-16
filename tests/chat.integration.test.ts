@@ -384,3 +384,56 @@ test("Given npm keeps returning 404 for Morty, When the bounded installation ret
     expect(job.diagnostics.filter((record) => record.event === "morty.retrying")).toHaveLength(11);
     expect(queryByRole(document.body, "link", { name: /Open chat/u })).toBeNull();
 });
+
+test("Given a revoked Morty runtime connection, When setup fails, Then the public diagnostic includes only allowlisted causes and preserves the failure", async () => {
+    app = await createTestApp({ mortyFailure: "runtime-revoked" });
+    const body = document.body;
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    await app.eventually(() => getByRole(body, "alert"));
+    const job = [...app.actions.jobs.values()][0];
+    if (job === undefined) {
+        throw new Error("Expected a session job");
+    }
+    await job.done;
+    expect(job.diagnostics).toContainEqual({ event: "morty.cause", code: "computer_pairing_revoked", depth: 2 });
+    expect(job.diagnostics).toContainEqual({ event: "morty.failed", code: "RUNTIME_START_FAILED", exitCode: 1 });
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-provider-detail");
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-code");
+});
+
+test("Given a temporarily unavailable Morty service, When setup runs again, Then the session opens after a bounded retry", async () => {
+    app = await createTestApp({ mortyFailure: "relay-transient" });
+    const body = document.body;
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    await app.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
+    await app.user.click(getByRole(body, "button", { name: "End session" }));
+    await app.eventually(() => getByRole(body, "button", { name: "Start a session" }));
+    const job = [...app.actions.jobs.values()][0];
+    if (job === undefined) {
+        throw new Error("Expected a session job");
+    }
+    await job.done;
+    expect(job.diagnostics).toContainEqual({ event: "morty.retrying", code: "RELAY_UNAVAILABLE", attempt: 1 });
+    expect(job.diagnostics).toContainEqual({ event: "morty.cause", code: "ECONNRESET", depth: 2 });
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-provider-detail");
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-code");
+});
+
+test("Given Morty stays unavailable, When setup exhausts its retries, Then the session fails once with safe diagnostics", async () => {
+    app = await createTestApp({ mortyFailure: "relay-unavailable" });
+    const body = document.body;
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    await app.eventually(() => getByRole(body, "alert"));
+    const job = [...app.actions.jobs.values()][0];
+    if (job === undefined) {
+        throw new Error("Expected a session job");
+    }
+    await job.done;
+    expect(job.diagnostics).toContainEqual({ event: "morty.failed", code: "RELAY_UNAVAILABLE", exitCode: 1 });
+    expect(job.diagnostics.filter((record) => record.event === "morty.retrying")).toHaveLength(2);
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-provider-detail");
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-code");
+});

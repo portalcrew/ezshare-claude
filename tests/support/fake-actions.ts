@@ -40,7 +40,10 @@ export async function startFakeActions(
             | "unknown"
             | "npm-text"
             | "npm404-transient"
-            | "npm404-unavailable";
+            | "npm404-unavailable"
+            | "runtime-revoked"
+            | "relay-transient"
+            | "relay-unavailable";
         readonly mortyHandoff?: "legacy" | "encrypted" | "conflicting";
         readonly sharedToken: () => string | null;
     },

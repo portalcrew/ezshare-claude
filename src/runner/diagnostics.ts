@@ -19,6 +19,9 @@ export const MORTY_ERROR_CODES = [
     "IDENTITY_CONFLICT",
     "IDENTITY_UNAVAILABLE",
     "COMPUTER_CONFLICT",
+    "computer_quota_exceeded",
+    "computer_revoked",
+    "computer_pairing_revoked",
     "INVALID_ACCOUNT_ID",
     "BOT_NOT_FOUND",
     "DEVICE_NOT_FOUND",
@@ -83,6 +86,25 @@ export const STARTUP_ERROR_CODES = [
     "NPM_FAILED",
 ] as const;
 
+export const MORTY_CAUSE_CODES = [
+    ...MORTY_ERROR_CODES,
+    ...NPM_ERROR_CODES,
+    ...STARTUP_ERROR_CODES,
+    "computer_relay_revoked",
+    "pairing_busy",
+    "connection_unavailable",
+] as const;
+
+export const MORTY_RETRY_CODES = [
+    "ETARGET",
+    "E404",
+    "RELAY_UNAVAILABLE",
+    "RELAY_TIMEOUT",
+    "ECONNRESET",
+    "ETIMEDOUT",
+    "ENOTFOUND",
+] as const;
+
 export type MortyOutputFormat = "empty" | "json" | "ndjson" | "text";
 
 export type MortyFailureCode =
@@ -117,7 +139,8 @@ export type DiagnosticRecord =
               | "closed";
       }
     | { readonly event: "morty.output"; readonly stdout: MortyOutputFormat; readonly stderr: MortyOutputFormat }
-    | { readonly event: "morty.retrying"; readonly code: "ETARGET" | "E404"; readonly attempt: number }
+    | { readonly event: "morty.retrying"; readonly code: (typeof MORTY_RETRY_CODES)[number]; readonly attempt: number }
+    | { readonly event: "morty.cause"; readonly code: (typeof MORTY_CAUSE_CODES)[number]; readonly depth: number }
     | { readonly event: "session.failed"; readonly code: ErrorCode }
     | {
           readonly event: "morty.failed";

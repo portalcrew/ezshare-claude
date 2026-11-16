@@ -38,7 +38,10 @@ export async function createTestApp(
             | "unknown"
             | "npm-text"
             | "npm404-transient"
-            | "npm404-unavailable";
+            | "npm404-unavailable"
+            | "runtime-revoked"
+            | "relay-transient"
+            | "relay-unavailable";
         readonly mortyHandoff?: "legacy" | "encrypted" | "conflicting";
     } = {},
 ) {
