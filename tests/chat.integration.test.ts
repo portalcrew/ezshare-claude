@@ -354,3 +354,33 @@ test.each([
         expect(JSON.stringify(job.diagnostics)).not.toContain("private-code");
     },
 );
+
+test("Given npm returns 404 for Morty during publication, When a member starts a session, Then setup retries and opens the private chat", async () => {
+    app = await createTestApp({ mortyFailure: "npm404-transient" });
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(document.body, "button", { name: "Start a session" })));
+    await app.eventually(() => getByRole(document.body, "link", { name: /Open chat/u }));
+    const job = [...app.actions.jobs.values()][0];
+    if (job === undefined) {
+        throw new Error("Expected the session job");
+    }
+    expect(job.diagnostics).toContainEqual({ event: "morty.retrying", code: "E404", attempt: 1 });
+    expect(queryByRole(document.body, "alert")).toBeNull();
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-workspace-detail");
+    expect(JSON.stringify(job.diagnostics)).not.toContain("private-code");
+});
+
+test("Given npm keeps returning 404 for Morty, When the bounded installation retries are exhausted, Then the member sees a failure with a safe registry code", async () => {
+    app = await createTestApp({ mortyFailure: "npm404-unavailable" });
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(document.body, "button", { name: "Start a session" })));
+    await app.eventually(() => getByRole(document.body, "alert"));
+    const job = [...app.actions.jobs.values()][0];
+    if (job === undefined) {
+        throw new Error("Expected the session job");
+    }
+    await job.done;
+    expect(job.diagnostics).toContainEqual({ event: "morty.failed", code: "E404", exitCode: 1 });
+    expect(job.diagnostics.filter((record) => record.event === "morty.retrying")).toHaveLength(11);
+    expect(queryByRole(document.body, "link", { name: /Open chat/u })).toBeNull();
+});

@@ -38,7 +38,9 @@ export async function startFakeActions(
             | "computer-conflict"
             | "node-module"
             | "unknown"
-            | "npm-text";
+            | "npm-text"
+            | "npm404-transient"
+            | "npm404-unavailable";
         readonly mortyHandoff?: "legacy" | "encrypted" | "conflicting";
         readonly sharedToken: () => string | null;
     },

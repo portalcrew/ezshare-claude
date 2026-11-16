@@ -36,7 +36,9 @@ export async function createTestApp(
             | "computer-conflict"
             | "node-module"
             | "unknown"
-            | "npm-text";
+            | "npm-text"
+            | "npm404-transient"
+            | "npm404-unavailable";
         readonly mortyHandoff?: "legacy" | "encrypted" | "conflicting";
     } = {},
 ) {

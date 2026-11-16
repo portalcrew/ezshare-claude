@@ -39,13 +39,19 @@ if (args[0] === "setup") {
             console.log(JSON.stringify({ error: { code: "private-code", message: "private-provider-detail" } }));
             process.exit(1);
         }
-        if (failure === "npm-transient" || failure === "npm-unavailable") {
-            if (failure === "npm-transient") {
+        if (["npm-transient", "npm-unavailable", "npm404-transient", "npm404-unavailable"].includes(failure)) {
+            if (failure === "npm-transient" || failure === "npm404-transient") {
                 unlinkSync(join(process.env.HOME, ".morty-failure"));
             }
             console.log(
                 JSON.stringify(
-                    { error: { code: "ETARGET", summary: "private-workspace-detail", detail: "private-code" } },
+                    {
+                        error: {
+                            code: failure.startsWith("npm404-") ? "E404" : "ETARGET",
+                            summary: "private-workspace-detail",
+                            detail: "private-code",
+                        },
+                    },
                     null,
                     2,
                 ),

@@ -370,13 +370,17 @@ class AgentSession {
                         if (bounded.aborted || failure === undefined) {
                             throw cause;
                         }
-                        // A moving latest tag can precede its version's availability. Retry installation only;
-                        // never replace a saved Computer or retry a Morty identity/authentication failure.
-                        if (failure.code !== "ETARGET" || attempt >= 3) {
+                        // npm can accept a publish before its metadata and archive are available everywhere.
+                        // E404 gets up to 165 seconds of waits within the shared four-minute startup deadline.
+                        // Retry installation only; never replace a Computer or retry Morty authentication failures.
+                        if (
+                            (failure.code !== "ETARGET" && failure.code !== "E404") ||
+                            attempt >= (failure.code === "E404" ? 12 : 3)
+                        ) {
                             this.#diagnostics({ event: "morty.failed", ...failure });
                             throw cause;
                         }
-                        this.#diagnostics({ event: "morty.retrying", code: "ETARGET", attempt });
+                        this.#diagnostics({ event: "morty.retrying", code: failure.code, attempt });
                         await this.#clock.sleep(15_000, bounded);
                     }
                 }

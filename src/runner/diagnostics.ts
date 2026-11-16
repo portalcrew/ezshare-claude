@@ -117,7 +117,7 @@ export type DiagnosticRecord =
               | "closed";
       }
     | { readonly event: "morty.output"; readonly stdout: MortyOutputFormat; readonly stderr: MortyOutputFormat }
-    | { readonly event: "morty.retrying"; readonly code: "ETARGET"; readonly attempt: number }
+    | { readonly event: "morty.retrying"; readonly code: "ETARGET" | "E404"; readonly attempt: number }
     | { readonly event: "session.failed"; readonly code: ErrorCode }
     | {
           readonly event: "morty.failed";
