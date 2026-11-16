@@ -23,6 +23,12 @@ const value = (name) => args[args.indexOf(name) + 1];
 if (args[0] === "setup") {
     if (existsSync(join(process.env.HOME, ".morty-failure"))) {
         const failure = readFileSync(join(process.env.HOME, ".morty-failure"), "utf8");
+        if (failure === "npm-text") {
+            console.error(
+                "npm error code EACCES\nnpm error private-provider-detail https://morty.build/continue#code=private-code",
+            );
+            process.exit(1);
+        }
         if (failure === "node-module") {
             console.error(
                 "Error [ERR_MODULE_NOT_FOUND]: private-provider-detail https://morty.build/continue#code=private-code",

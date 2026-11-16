@@ -479,6 +479,11 @@ function mortyFailureCode(stdout: string, stderr: string): MortyFailureCode {
     if (stderr.startsWith("Morty daemon failed: ")) {
         return "DAEMON_FAILED";
     }
+    for (const code of NPM_ERROR_CODES) {
+        if (stderr.split("\n").some((line) => line === `npm error code ${code}` || line === `npm ERR! code ${code}`)) {
+            return code;
+        }
+    }
     if (stderr.startsWith("npm error ")) {
         return "NPM_FAILED";
     }

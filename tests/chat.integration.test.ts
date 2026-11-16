@@ -333,6 +333,7 @@ test("Given npm latest stays unavailable, When setup exhausts its bounded retrie
 test.each([
     ["computer-conflict", "COMPUTER_CONFLICT"],
     ["node-module", "ERR_MODULE_NOT_FOUND"],
+    ["npm-text", "EACCES"],
     ["unknown", "UNRECOGNIZED"],
 ] as const)(
     "Given a %s startup error, When a member starts a session, Then diagnostics report %s without private output",
