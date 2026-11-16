@@ -23,6 +23,16 @@ const value = (name) => args[args.indexOf(name) + 1];
 if (args[0] === "setup") {
     if (existsSync(join(process.env.HOME, ".morty-failure"))) {
         const failure = readFileSync(join(process.env.HOME, ".morty-failure"), "utf8");
+        if (failure === "node-module") {
+            console.error(
+                "Error [ERR_MODULE_NOT_FOUND]: private-provider-detail https://morty.build/continue#code=private-code",
+            );
+            process.exit(1);
+        }
+        if (failure === "unknown") {
+            console.log(JSON.stringify({ error: { code: "private-code", message: "private-provider-detail" } }));
+            process.exit(1);
+        }
         if (failure === "npm-transient" || failure === "npm-unavailable") {
             if (failure === "npm-transient") {
                 unlinkSync(join(process.env.HOME, ".morty-failure"));
@@ -55,7 +65,7 @@ if (args[0] === "setup") {
         console.error(
             JSON.stringify({
                 error: {
-                    code: "INVALID_REQUEST",
+                    code: failure === "computer-conflict" ? "COMPUTER_CONFLICT" : "INVALID_REQUEST",
                     message: "private-provider-detail",
                     url: "https://morty.build/continue#code=private-code",
                 },

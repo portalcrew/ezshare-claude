@@ -329,3 +329,27 @@ test("Given npm latest stays unavailable, When setup exhausts its bounded retrie
     expect(job.diagnostics.filter((record) => record.event === "morty.retrying")).toHaveLength(2);
     expect(queryByRole(body, "link", { name: /Open chat/u })).toBeNull();
 });
+
+test.each([
+    ["computer-conflict", "COMPUTER_CONFLICT"],
+    ["node-module", "ERR_MODULE_NOT_FOUND"],
+    ["unknown", "UNRECOGNIZED"],
+] as const)(
+    "Given a %s startup error, When a member starts a session, Then diagnostics report %s without private output",
+    async (mortyFailure, code) => {
+        app = await createTestApp({ mortyFailure });
+        await connect(app, tokens.alice);
+        await app.user.click(
+            await app.eventually(() => getByRole(document.body, "button", { name: "Start a session" })),
+        );
+        await app.eventually(() => getByRole(document.body, "alert"));
+        const job = [...app.actions.jobs.values()][0];
+        if (job === undefined) {
+            throw new Error("Expected the session job");
+        }
+        await job.done;
+        expect(job.diagnostics).toContainEqual({ event: "morty.failed", code, exitCode: 1 });
+        expect(JSON.stringify(job.diagnostics)).not.toContain("private-provider-detail");
+        expect(JSON.stringify(job.diagnostics)).not.toContain("private-code");
+    },
+);

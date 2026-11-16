@@ -15,7 +15,14 @@ import {
 } from "../shared/protocol.ts";
 import { agentCommand, runAgentCommand } from "./agent-process.ts";
 import { type ActionsContext, agentWorkspace, historyArchivePath, type StepEnvironment } from "./context.ts";
-import { type Diagnostics, MORTY_ERROR_CODES, type MortyFailureCode, NPM_ERROR_CODES } from "./diagnostics.ts";
+import {
+    type Diagnostics,
+    MORTY_ERROR_CODES,
+    type MortyFailureCode,
+    type MortyOutputFormat,
+    NPM_ERROR_CODES,
+    STARTUP_ERROR_CODES,
+} from "./diagnostics.ts";
 import { claudeProject, type HistoryOwner, latestSessionId, restoreHistory, saveHistory } from "./history-archive.ts";
 import { type ChatRunnerChannel, createChatChannel, type RunnerPorts, runSession } from "./session.ts";
 
@@ -332,6 +339,11 @@ class AgentSession {
                             signal: bounded,
                             onFailure: ({ stdout, stderr, exitCode }) => {
                                 failures.push({ code: mortyFailureCode(stdout, stderr), exitCode });
+                                this.#diagnostics({
+                                    event: "morty.output",
+                                    stdout: mortyOutputFormat(stdout),
+                                    stderr: mortyOutputFormat(stderr),
+                                });
                             },
                         });
                     } catch (cause) {
@@ -452,5 +464,36 @@ function mortyFailureCode(stdout: string, stderr: string): MortyFailureCode {
             return parsed.output.error.code;
         }
     }
+    const text = `${stdout}\n${stderr}`;
+    for (const code of STARTUP_ERROR_CODES) {
+        if (text.includes(`Error [${code}]:`) || text.includes(`code: '${code}'`)) {
+            return code;
+        }
+    }
+    if (stderr.startsWith("Morty requires Node.js ")) {
+        return "NODE_RUNTIME_INCOMPATIBLE";
+    }
+    if (stderr.startsWith("error: unknown ") || stderr.startsWith("error: required option ")) {
+        return "CLI_ARGUMENT_REJECTED";
+    }
+    if (stderr.startsWith("Morty daemon failed: ")) {
+        return "DAEMON_FAILED";
+    }
+    if (stderr.startsWith("npm error ")) {
+        return "NPM_FAILED";
+    }
     return "UNRECOGNIZED";
+}
+
+function mortyOutputFormat(output: string): MortyOutputFormat {
+    if (output.trim() === "") {
+        return "empty";
+    }
+    if (safeJson(output.trim()) !== null) {
+        return "json";
+    }
+    if (output.split("\n").some((line) => safeJson(line.trim()) !== null)) {
+        return "ndjson";
+    }
+    return "text";
 }
