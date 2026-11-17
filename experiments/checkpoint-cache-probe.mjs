@@ -42,6 +42,10 @@ if (process.argv[2] === "restore") {
             "404",
             "tar failed",
             "TypeError",
+            "ValidationError",
+            "invalid_args",
+            "not_committed",
+            "exception",
         ].filter((code) => output.includes(code));
         console.error(
             JSON.stringify({
@@ -51,6 +55,11 @@ if (process.argv[2] === "restore") {
                 signals,
                 runtime: Boolean(process.env.ACTIONS_RUNTIME_TOKEN),
                 endpoint: Boolean(process.env.ACTIONS_RESULTS_URL),
+                outputBytes: output.length,
+                exit:
+                    error instanceof Error && error.cause && typeof error.cause.code === "number"
+                        ? error.cause.code
+                        : null,
             }),
         );
         process.exitCode = 1;
