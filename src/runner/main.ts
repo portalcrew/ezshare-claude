@@ -39,7 +39,7 @@ async function main(args: readonly string[], signal: AbortSignal): Promise<unkno
                 await runChat(
                     context,
                     process.env,
-                    { ...ports, historyCache: createActionsHistoryCache(context, process.env) },
+                    { ...ports, historyCache: createActionsHistoryCache(context, process.env, ports.diagnostics) },
                     signal,
                 );
             } else {

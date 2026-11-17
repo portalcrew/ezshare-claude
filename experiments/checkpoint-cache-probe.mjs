@@ -7,6 +7,7 @@ import { restoreCache } from "@actions/cache";
 import { runAgentCommand } from "../src/runner/agent-process.ts";
 import { historyArchivePath } from "../src/runner/context.ts";
 import { createActionsHistoryCache } from "../src/runner/history-cache.ts";
+import { toAppError } from "../src/shared/errors.ts";
 
 if (process.argv[2] === "restore") {
     try {
@@ -17,8 +18,8 @@ if (process.argv[2] === "restore") {
         process.exitCode = 1;
     }
 } else {
-    await probe().catch(() => {
-        console.error(JSON.stringify({ event: "checkpoint.probe", stage: "failed" }));
+    await probe().catch((error) => {
+        console.error(JSON.stringify({ event: "checkpoint.probe", stage: "failed", code: toAppError(error).code }));
         process.exitCode = 1;
     });
 }
@@ -36,7 +37,7 @@ async function probe() {
     };
     const archive = historyArchivePath(context.runnerTemp);
     const key = `ezshare-history-${context.userId}-run-${context.runId}-checkpoint-${crypto.randomUUID()}`;
-    const cache = createActionsHistoryCache(context, process.env);
+    const cache = createActionsHistoryCache(context, process.env, (record) => console.error(JSON.stringify(record)));
     const bytes = randomBytes(1024);
     const signal = AbortSignal.timeout(4 * 60_000);
     try {
@@ -81,7 +82,14 @@ async function probe() {
         }
         console.log(JSON.stringify({ event: "checkpoint.probe", stage: "restored" }));
     } finally {
-        await cache.remove(key, AbortSignal.timeout(30_000));
-        console.log(JSON.stringify({ event: "checkpoint.probe", stage: "removed" }));
+        try {
+            await cache.remove(key, AbortSignal.timeout(30_000));
+            console.log(JSON.stringify({ event: "checkpoint.probe", stage: "removed" }));
+        } catch (error) {
+            console.error(
+                JSON.stringify({ event: "checkpoint.probe", stage: "cleanup_failed", code: toAppError(error).code }),
+            );
+            process.exitCode = 1;
+        }
     }
 }

@@ -118,6 +118,13 @@ export type MortyFailureCode =
  * links, authorization codes or conversation content.
  */
 export type DiagnosticRecord =
+    | {
+          readonly event: "history.cache_failed";
+          readonly outcome: "invalid_args" | "not_committed" | "exception";
+          readonly name: "Error" | "TypeError" | "ValidationError" | "CacheWriteDeniedError" | "AbortError" | "other";
+          readonly code: "ENOENT" | "EACCES" | "ERR_INVALID_URL" | "ERR_INVALID_ARG_TYPE" | "runtime_missing" | "other";
+          readonly exitCode: number | null;
+      }
     | { readonly event: "history.checkpoint"; readonly outcome: "saved"; readonly sequence: number }
     | {
           readonly event: "history.checkpoint";

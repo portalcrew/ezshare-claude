@@ -11,3 +11,5 @@ packageExtensions:
 # @actions/glob still requests the affected major; use the GHSA-g3hv-75wg-m249 fix.
 overrides:
   '@actions/glob>minimatch': 11.0.1
+patchedDependencies:
+  '@actions/glob@0.7.0': patches/@actions__glob@0.7.0.patch
