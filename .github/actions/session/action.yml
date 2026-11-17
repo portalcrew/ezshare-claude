@@ -1,0 +1,8 @@
+name: Serve private Claude session
+description: Run the session controller with access to the Actions cache runtime
+outputs:
+  history:
+    description: Whether a complete encrypted archive is available to the fallback save step
+runs:
+  using: node24
+  main: main.mjs

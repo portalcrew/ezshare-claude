@@ -38,6 +38,7 @@ test("Given a connected member, When she starts a session and later ends it, The
     for (const entry of agentLog) {
         expect(entry.names.filter((name) => name.startsWith("GH_") || name.startsWith("GITHUB_"))).toEqual([]);
         expect(entry.names).not.toContain("RUNNER_TEMP");
+        expect(entry.names).not.toContain("ACTIONS_RUNTIME_TOKEN");
     }
 
     await app.user.click(getByRole(body, "button", { name: "Save and end session" }));

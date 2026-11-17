@@ -17,7 +17,7 @@ test("Given a member chooses VS Code, When authorization is needed, Then she see
     await connect(app, tokens.alice);
     const choice = await app.eventually(() => getByRole(body, "combobox", { name: "Open with" }));
     await app.user.selectOptions(choice, "vscode");
-    expect(queryByRole(body, "checkbox", { name: "Use a new Morty identity" })).toBeNull();
+    await app.eventually(() => expect(queryByRole(body, "checkbox", { name: "Use a new Morty identity" })).toBeNull());
     await app.user.click(getByRole(body, "button", { name: "Start a session" }));
     const authorize = await app.eventually(() => getByRole(body, "link", { name: /Authorize VS Code/u }));
     expect(authorize.getAttribute("href")).toBe("https://github.com/login/device");

@@ -13,7 +13,7 @@ on:
 
 permissions:
   contents: read
-  actions: read
+  actions: write
   issues: write
 
 jobs:
@@ -84,7 +84,7 @@ jobs:
           restore-keys: ezshare-history-${{ github.actor_id }}-run-
       - name: Serve the session
         id: serve
-        run: node src/runner/main.ts chat
+        uses: ./.github/actions/session
         env:
           GH_TOKEN: ${{ github.token }}
           EZSHARE_CLAUDE_TOKEN: ${{ secrets.claude_token }}

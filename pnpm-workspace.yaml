@@ -8,3 +8,6 @@ packageExtensions:
   dependency-cruiser@18:
     dependencies:
       typescript: 6.0.3
+# @actions/glob still requests the affected major; use the GHSA-g3hv-75wg-m249 fix.
+overrides:
+  '@actions/glob>minimatch': 11.0.1
