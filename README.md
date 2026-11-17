@@ -8,15 +8,15 @@ metadata:
 
 # ezshare-claude
 
-Share one Claude Code account with your team while every member keeps a private session.
+Share Claude Code accounts with your team while every member keeps a private session.
 
 A member opens the launcher, connects with a fine-grained GitHub token and starts a session. GitHub Actions
-starts a fresh runner for that member, Claude Code runs there with the team's shared account, and Morty connects
-it to the member's browser. Sessions last up to four hours and end early after 15 minutes without a new Claude
+starts a fresh runner for that member. Claude Code uses the account the member selected, and the session opens
+through Morty or VS Code. Sessions last up to four hours and end early after 15 minutes without a new Claude
 turn, which frees the runner. Normal session shutdown, including an idle stop, encrypts the member's Claude
 conversation and workspace for the next session, under a key kept only in that browser. An unreadable archive
 is not overwritten unless the member chooses to replace it; clearing browser data loses its key. An account
-owner shares their Claude account once, from the same launcher.
+owner adds or reauthorizes shared Claude accounts from the same launcher.
 
 ## How it stays private
 
@@ -35,7 +35,44 @@ What it does not protect against is described in [SECURITY.md](SECURITY.md); rea
 
 Members of an existing team use that team's launcher and execution repository; they do not each fork it.
 An independent user or team forks this repository and deploys their own launcher and Actions workflows.
-Forks do not inherit the shared Claude credential: an account owner must share one in the new repository.
+Forks do not inherit shared Claude credentials: an account owner must add accounts in the new repository.
+
+## Shared accounts
+
+**Manage shared accounts** lists stored accounts and their last credential update time. A stored credential does
+not prove Claude still accepts it; Claude checks authorization when a session starts. An empty repository shows
+**No accounts shared yet**. A permissions or network error is shown separately and is never treated as an empty
+inventory.
+
+- **Add account** creates an independent credential without replacing existing accounts. A label is normalized
+  and limited to 36 UTF-8 bytes to fit GitHub's Secret name limit. Labels are supplied by the owner, not verified
+  Claude account identities.
+- **Reauthorize** replaces only the selected account's credential and keeps its identifier.
+- **Remove** asks for confirmation and removes that repository Secret. Existing sessions and copied credentials
+  may continue to work; revoke the token in Claude account settings to invalidate those copies. Removing an
+  account never deletes members' conversation history.
+
+The original `EZSHARE_CLAUDE_TOKEN` appears as **Previously shared account** automatically; no migration or new
+Claude login is required to keep using it. Under **Use a shared account**, one available account is selected
+initially. With multiple accounts, the member explicitly chooses one before starting. An account removed after
+selection is not silently replaced by another. Account and interface changes keep the same personal history key
+for that GitHub repository and numeric user ID.
+
+### Credential and selection state
+
+| State | Writer | Reader |
+| --- | --- | --- |
+| Original repository Secret `EZSHARE_CLAUDE_TOKEN` | Owner browser through the sealed Secrets API | GitHub's workflow caller, then the selected worker |
+| Named repository Secrets `EZSHARE_CLAUDE_ACCOUNT_<id>` | Owner browser through the sealed Secrets API | GitHub's workflow caller, then the selected worker |
+| Secret names and update times | GitHub when a credential is stored or changed | Members with Secrets read; API responses never include credential values |
+| Browser `account:<repository>:<user-id>:<request-id>` record | Launcher before dispatch; deleted when the pending session ends | Launcher when recovering the selected account or completing authorization |
+| Runner `EZSHARE_CLAUDE_TOKEN` environment value | GitHub injects the one explicitly forwarded `claude_token` secret | Trusted session controller; only the selected Claude credential is passed to the unprivileged agent |
+
+Account identifiers contain a reversible Base32 label and a random suffix. Labels are metadata, not encrypted
+identity claims. The dispatch workflow allocates no runner and forwards one named credential to the reusable
+worker; it does not inherit the repository's Secrets context. Named pending sessions use version 2 so an old
+launcher cannot accidentally store their authorization over the original credential. Version-1 pending records
+and encrypted history archives remain compatible.
 
 ## Setting up your fork
 
@@ -54,9 +91,11 @@ Forks do not inherit the shared Claude credential: an account owner must share o
    encryption keys with every other Pages site on that host. A repository path is not an isolation boundary.
    Only connect with a real token when all sites on that host are trusted, or use a dedicated custom hostname.
    Changing the hostname later changes the origin and does not migrate browser history keys automatically.
-5. The account owner opens **Share your account** in the fork's launcher. A member's fine-grained token selects
-   only the fork and needs Actions/Issues read and write; the owner's token additionally needs Secrets read and
-   write. Organization policies may require approval. This launcher accepts fine-grained tokens only; GitHub's
+5. The account owner opens **Manage shared accounts → Add account** in the fork's launcher, gives it a short
+   team-visible label and completes Claude authorization. The owner can use the current browser or the runner
+   through desktop VS Code's Integrated Browser. A member's fine-grained token selects only the fork and needs
+   Actions/Issues read and write plus Secrets read to list account metadata. Adding, reauthorizing or removing an
+   account requires Secrets read and write. Organization policies may require approval. This launcher accepts fine-grained tokens only; GitHub's
    repository/outside-collaborator limitations make an organization with internal members the supported team setup.
    See [GitHub's token limitations](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#fine-grained-personal-access-tokens-limitations).
 
