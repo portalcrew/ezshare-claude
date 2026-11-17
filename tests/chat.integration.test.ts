@@ -228,7 +228,8 @@ test("Given Morty reports a setup failure on stderr, When a member starts a sess
     await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
     const alert = await app.eventually(() => getByRole(body, "alert"));
     expect(alert.textContent).toContain("Morty could not connect");
-    expect(getAllByText(body, "Morty could not connect. Start a new session in a few minutes.")).toHaveLength(1);
+    expect(getAllByText(body, /^Morty could not connect\./u)).toHaveLength(1);
+    expect(alert.textContent).toContain("choose VS Code");
     const job = await app.eventually(() => {
         const current = [...(app?.actions.jobs.values() ?? [])][0];
         if (current === undefined) {
@@ -437,4 +438,23 @@ test("Given Morty stays unavailable, When setup exhausts its retries, Then the s
     expect(job.diagnostics.filter((record) => record.event === "morty.retrying")).toHaveLength(2);
     expect(JSON.stringify(job.diagnostics)).not.toContain("private-provider-detail");
     expect(JSON.stringify(job.diagnostics)).not.toContain("private-code");
+});
+
+test("Given Morty rejects even a replacement Computer, When a member starts, Then identity recovery stops after one attempt and reports the safe failure", async () => {
+    app = await createTestApp({ mortyFailure: "computer-revoked" });
+    await connect(app, tokens.alice);
+    await app.user.click(await app.eventually(() => getByRole(document.body, "button", { name: "Start a session" })));
+    await app.eventually(() => getByRole(document.body, "alert"));
+    const job = [...app.actions.jobs.values()][0];
+    if (job === undefined) {
+        throw new Error("Expected a session job");
+    }
+    await job.done;
+    expect(
+        job.diagnostics.filter(
+            (record) => record.event === "session.stage" && record.stage === "resetting_morty_identity",
+        ),
+    ).toHaveLength(1);
+    expect(job.diagnostics).toContainEqual({ event: "morty.failed", code: "computer_revoked", exitCode: 1 });
+    expect(queryByRole(document.body, "link", { name: /Open chat/u })).toBeNull();
 });

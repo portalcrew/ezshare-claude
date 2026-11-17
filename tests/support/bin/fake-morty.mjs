@@ -104,7 +104,12 @@ if (args[0] === "setup") {
         console.error(
             JSON.stringify({
                 error: {
-                    code: failure === "computer-conflict" ? "COMPUTER_CONFLICT" : "INVALID_REQUEST",
+                    code:
+                        failure === "computer-revoked"
+                            ? "computer_revoked"
+                            : failure === "computer-conflict"
+                              ? "COMPUTER_CONFLICT"
+                              : "INVALID_REQUEST",
                     message: "private-provider-detail",
                     url: "https://morty.build/continue#code=private-code",
                 },
@@ -118,6 +123,13 @@ if (args[0] === "setup") {
     const identity = existsSync(identityFile)
         ? JSON.parse(readFileSync(identityFile, "utf8"))
         : { computerId: crypto.randomUUID(), computerE2EAccessSecret: "fake-private-computer-key" };
+    if (identity.revoked === true) {
+        console.log(JSON.stringify({ status: "checking_computer" }));
+        console.error(
+            JSON.stringify({ error: { code: "computer_revoked", message: "The Computer has been revoked" } }),
+        );
+        process.exit(1);
+    }
     writeFileSync(identityFile, JSON.stringify(identity));
     appendFileSync(
         join(state, "computer", "sessions", "events.jsonl"),

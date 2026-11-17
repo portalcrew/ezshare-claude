@@ -389,6 +389,7 @@ class AgentSession {
             240_000,
             signal,
             async (bounded) => {
+                let renewedIdentity = false;
                 for (let attempt = 1; ; attempt += 1) {
                     const failures: { readonly code: MortyFailureCode; readonly exitCode: number | null }[] = [];
                     try {
@@ -411,10 +412,18 @@ class AgentSession {
                         if (bounded.aborted || failure === undefined) {
                             throw cause;
                         }
+                        // A revoked Computer cannot reconnect. Keep Claude history and renew only Morty's identity once.
+                        if (failure.code === "computer_revoked" && !renewedIdentity) {
+                            renewedIdentity = true;
+                            this.#diagnostics({ event: "morty.recovering", code: "computer_revoked" });
+                            this.#diagnostics({ event: "session.stage", stage: "resetting_morty_identity" });
+                            await this.resetMortyIdentity(bounded);
+                            continue;
+                        }
                         // npm can accept a publish before its metadata and archive are available everywhere.
                         // E404 gets up to 165 seconds of waits within the shared four-minute startup deadline.
                         // Setup persists pairing request identities, so transient service failures can resume safely.
-                        // Authentication and revoked credentials require their owning recovery flow.
+                        // Other authentication and pairing failures require their owning recovery flow.
                         if (
                             !v.is(v.picklist(MORTY_RETRY_CODES), failure.code) ||
                             attempt >= (failure.code === "E404" ? 12 : 3)

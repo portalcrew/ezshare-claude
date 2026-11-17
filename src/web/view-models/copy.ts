@@ -64,7 +64,7 @@ export function errorMessage(code: ConnectionError): string {
         case "vscode_unavailable":
             return "VS Code could not connect. Start a new session and authorize again if asked.";
         case "morty_unavailable":
-            return "Morty could not connect. Start a new session in a few minutes.";
+            return "Morty could not connect. Try “Use a new Morty identity” when starting again, or choose VS Code. Your saved Claude history is kept.";
         case "provider_failed":
             return "Claude did not complete the authorization. Start again and paste the newest code.";
         case "expired":
