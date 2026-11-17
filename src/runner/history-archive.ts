@@ -25,7 +25,6 @@ import type { AgentAccount } from "./context.ts";
 const MAGIC = Buffer.from("EZH1");
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
-const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
 const MAX_MANIFEST_BYTES = 4096;
 /** Watchdog for one streamed agent command (tar, ls), so a hung process cannot block the session. */
 const STREAM_TIMEOUT_MS = 5 * 60_000;
@@ -94,7 +93,7 @@ export async function restoreHistory(
     if (size < 0) {
         return { kind: "none" };
     }
-    if (size < MAGIC.length + NONCE_BYTES + TAG_BYTES || size > MAX_ARCHIVE_BYTES) {
+    if (size < MAGIC.length + NONCE_BYTES + TAG_BYTES) {
         return { kind: "unreadable" };
     }
     const plain = join(dirname(archive), "history.plain");
@@ -187,7 +186,6 @@ export async function saveHistory(
         const cipher = createCipheriv("aes-256-gcm", historyKey(key), nonce, { authTagLength: TAG_BYTES });
         cipher.setAAD(associatedData(owner));
         const manifest = Buffer.from(`${JSON.stringify({ version: 1, sessionId })}\n`);
-        let bytes = 0;
         let started = false;
         const begin = (): Buffer => {
             started = true;
@@ -195,11 +193,6 @@ export async function saveHistory(
         };
         const seal = new Transform({
             transform(chunk: Buffer, _encoding, callback) {
-                bytes += chunk.length;
-                if (bytes > MAX_ARCHIVE_BYTES) {
-                    callback(new AppError("history_too_large"));
-                    return;
-                }
                 const head = started ? Buffer.alloc(0) : begin();
                 callback(null, Buffer.concat([head, cipher.update(chunk)]));
             },

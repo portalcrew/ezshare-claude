@@ -69,14 +69,13 @@ export function ChatView({
                     case "idle":
                         return (
                             <>
-                                <Announcer
-                                    message={
-                                        phase.outcome === null || phase.outcome.kind === "failed"
-                                            ? ""
-                                            : chatOutcomeText(phase.outcome)
-                                    }
-                                />
-                                {phase.outcome !== null && <OutcomeNotice outcome={phase.outcome} />}
+                                {phase.outcome?.kind === "failed" ? (
+                                    <OutcomeNotice outcome={phase.outcome} />
+                                ) : (
+                                    <div role="status">
+                                        {phase.outcome !== null && <OutcomeNotice outcome={phase.outcome} />}
+                                    </div>
+                                )}
                                 <p className="text-sm">{chatCopy.intro}</p>
                                 {replacingHistory && <Notice tone="info">{chatCopy.replacingHistory}</Notice>}
                                 <AccountsPicker

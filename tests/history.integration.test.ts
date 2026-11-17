@@ -106,7 +106,10 @@ test("Given history saved from another browser, When the member starts a session
     await app.eventually(() =>
         expect(getByRole(body, "main").textContent).toContain("Your next session will replace it"),
     );
-    expect(await endSession(app)).toContain("Its history was not saved");
+    const outcome = await endSession(app);
+    expect(outcome).toContain("The final save did not complete");
+    expect(getByRole(body, "status").textContent).toBe(outcome);
+    expect(getByRole(body, "main").textContent?.match(/The final save did not complete/gu)).toHaveLength(1);
     expect(finalCacheKeys(app)).toHaveLength(1);
 
     const third = await runSession(app);
@@ -138,7 +141,7 @@ test.each(["modified ciphertext", "truncated tag"])(
         await switchBrowser(app, tokens.bob);
         await runSession(app);
         expect(getByRole(body, "main").textContent).toContain("Your saved history could not be opened");
-        expect(await endSession(app)).toContain("Its history was not saved");
+        expect(await endSession(app)).toContain("The final save did not complete");
         expect(finalCacheKeys(app)).toHaveLength(2);
 
         // Damaged ciphertext or an incomplete tag must fail before anything is unpacked.
@@ -152,7 +155,7 @@ test.each(["modified ciphertext", "truncated tag"])(
 
         await runSession(app);
         expect(getByRole(body, "main").textContent).toContain("Your saved history could not be opened");
-        expect(await endSession(app)).toContain("Its history was not saved");
+        expect(await endSession(app)).toContain("The final save did not complete");
         expect(finalCacheKeys(app)).toHaveLength(2);
     },
 );

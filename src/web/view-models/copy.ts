@@ -294,7 +294,7 @@ export function chatOutcomeText(outcome: ChatOutcome): string {
         case "stopped":
             return outcome.history === "archived"
                 ? "Your last session ended. Its history is saved for your next session."
-                : "Your last session ended. Its history was not saved. Any previous saved history is unchanged.";
+                : "Your last session ended. The final save did not complete. You can still continue from your most recent saved copy, if one exists.";
         case "expired":
             return "Your last session reached its time limit and ended.";
         case "failed":

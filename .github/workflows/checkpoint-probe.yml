@@ -1,6 +1,11 @@
 name: History checkpoint cache probe
 on:
   workflow_dispatch:
+    inputs:
+      large-archive:
+        description: Exercise saving and restoring an archive above the former 512 MiB limit
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: write
@@ -10,7 +15,7 @@ concurrency:
 jobs:
   probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -23,4 +28,5 @@ jobs:
           pnpm install --frozen-lockfile --prod
       - uses: ./.github/actions/checkpoint-probe
         env:
+          EZSHARE_PROBE_LARGE_ARCHIVE: ${{ inputs.large-archive }}
           GH_TOKEN: ${{ github.token }}

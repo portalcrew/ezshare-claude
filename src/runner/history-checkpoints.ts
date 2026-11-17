@@ -8,7 +8,8 @@ import { latestSessionId, saveHistory } from "./history-archive.ts";
 import type { HistoryCache } from "./history-cache.ts";
 
 const INTERVAL_MS = 5 * 60_000;
-const SAVE_TIMEOUT_MS = 6 * 60_000;
+// Allow a full archive and cache upload to use their separate watchdogs.
+const SAVE_TIMEOUT_MS = 11 * 60_000;
 
 export interface SavingHistory {
     readonly key: string;
