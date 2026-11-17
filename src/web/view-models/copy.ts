@@ -246,9 +246,10 @@ export const chatCopy = {
     vscodeAuthorizationHint:
         "Open GitHub, enter this code, and approve Visual Studio Code. Use the same GitHub account when opening VS Code. Your Claude account does not need another login.",
     vscodeAuthorize: "Authorize VS Code",
-    vscodeOpen: "Open VS Code",
+    vscodeOpen: "Open VS Code in browser",
+    vscodeDesktopOpen: "Open in desktop VS Code",
     vscodeReadyHint:
-        "Use the same GitHub account you authorized. Open the Claude Code extension and choose a conversation from its history, or use the terminal. End this session here to save your workspace.",
+        "Open the Claude Code extension and choose a conversation from its history. Desktop browsing is preconfigured: choose View → Browser and check the remote indicator. Use the GitHub account you authorized. End this session here to save.",
     open: "Open chat",
     readyHint: `Anyone with this link can use your session until it ends, so do not share it. The session ends after ${chatLifetime}, or after ${chatIdleStop} without a message. End it here when you are done, so your history is saved.`,
     end: "End session",

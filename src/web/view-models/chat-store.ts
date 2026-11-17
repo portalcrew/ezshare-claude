@@ -13,6 +13,7 @@ import {
     mortyUrl,
     type SessionAccess,
     sessionAccessSchema,
+    vscodeDesktopUrl,
     vscodeUrl,
 } from "../../shared/protocol.ts";
 import type { PendingSession } from "../services/vault.ts";
@@ -41,6 +42,10 @@ export type ChatOutcome =
     | { readonly kind: "expired" }
     | { readonly kind: "failed"; readonly code: ErrorCode };
 
+type ReadyEntry =
+    | { readonly access: "morty"; readonly url: string }
+    | { readonly access: "vscode"; readonly url: string; readonly desktopUrl: string };
+
 export type ChatPhase =
     | { readonly kind: "loading" }
     | { readonly kind: "idle"; readonly outcome: ChatOutcome | null }
@@ -49,13 +54,11 @@ export type ChatPhase =
     | { readonly kind: "queued"; readonly session: PendingSession }
     | { readonly kind: "preparing"; readonly session: PendingSession }
     | { readonly kind: "authorizing"; readonly session: PendingSession; readonly code: string }
-    | {
+    | ({
           readonly kind: "ready";
           readonly session: PendingSession;
-          readonly url: string;
-          readonly access: SessionAccess;
           readonly history: HistoryStart;
-      }
+      } & ReadyEntry)
     | { readonly kind: "stopping"; readonly session: PendingSession; readonly forced: boolean };
 
 /** User commands in flight; the view disables the matching controls. */
@@ -345,13 +348,11 @@ export function createChatStore(member: MemberContext) {
 function progressOf(session: PendingSession, messages: readonly ChatRunnerMessage[]): ChatPhase {
     const ready = messages.findLast((message) => message.kind === "ready" || message.kind === "vscode_ready");
     if (ready !== undefined) {
-        return {
-            kind: "ready",
-            session,
-            access: ready.kind === "ready" ? "morty" : "vscode",
-            url: ready.kind === "ready" ? mortyUrl(ready.body.url) : vscodeUrl(ready.body.url),
-            history: ready.body.history,
-        };
+        const entry: ReadyEntry =
+            ready.kind === "ready"
+                ? { access: "morty", url: mortyUrl(ready.body.url) }
+                : { access: "vscode", url: vscodeUrl(ready.body.url), desktopUrl: vscodeDesktopUrl(ready.body.url) };
+        return { kind: "ready", session, history: ready.body.history, ...entry };
     }
     const challenge = messages.findLast((message) => message.kind === "vscode_challenge");
     return challenge === undefined

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import * as v from "valibot";
 import { type Clock, cleanupSignal, withDeadline } from "../shared/async.ts";
 import { AppError } from "../shared/errors.ts";
-import { vscodeDeviceCodeSchema, vscodeUrl } from "../shared/protocol.ts";
+import { VSCODE_DESKTOP_WORKSPACE, vscodeDeviceCodeSchema, vscodeUrl } from "../shared/protocol.ts";
 import { type AgentCommand, agentCommand, runAgentCommand } from "./agent-process.ts";
 import { type ActionsContext, agentWorkspace } from "./context.ts";
 import type { Diagnostics } from "./diagnostics.ts";
@@ -56,7 +56,7 @@ export class VscodeSession {
         channel: ChatRunnerChannel,
         signal: AbortSignal,
     ): Promise<{ readonly kind: "ready"; readonly url: string } | { readonly kind: "stopped" }> => {
-        await this.removeLegacyTerminalProfile(signal);
+        await this.prepareWorkspace(signal);
         this.#diagnostics({ event: "vscode.stage", stage: "checking_authorization" });
         let exitCode: number | null = null;
         try {
@@ -207,10 +207,18 @@ export class VscodeSession {
         }
     };
 
-    private readonly removeLegacyTerminalProfile = async (signal: AbortSignal): Promise<void> => {
+    private readonly prepareWorkspace = async (signal: AbortSignal): Promise<void> => {
         const script = String.raw`
             const fs = require("node:fs");
             const path = require("node:path");
+            // Regenerate our own workspace file; never replace the member's workspace settings.
+            fs.writeFileSync(process.argv[2], JSON.stringify({
+                folders: [{ path: process.argv[1] }],
+                settings: {
+                    "workbench.browser.enableRemoteProxy": true,
+                    "workbench.browser.dataStorage": "workspace"
+                }
+            }, null, 2) + "\n", { mode: 384 });
             const file = path.join(process.argv[1], ".vscode", "settings.json");
             let settings;
             try {
@@ -239,7 +247,12 @@ export class VscodeSession {
                 this.#path,
                 agentWorkspace(this.#context.agent),
                 "node",
-                ["-e", script, agentWorkspace(this.#context.agent)],
+                [
+                    "-e",
+                    script,
+                    agentWorkspace(this.#context.agent),
+                    join(this.#context.agent.home, VSCODE_DESKTOP_WORKSPACE),
+                ],
                 {},
             ),
             { timeout: 15_000, failure: "vscode_unavailable", signal },

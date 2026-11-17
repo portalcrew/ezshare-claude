@@ -190,7 +190,12 @@ export function ChatView({
                                     busy={command === "replace_history"}
                                     onReplace={actions.replaceHistory}
                                 />
-                                <ExternalLink href={phase.url} prominent>
+                                {phase.access === "vscode" && (
+                                    <ExternalLink href={phase.desktopUrl} destination="application" prominent>
+                                        {chatCopy.vscodeDesktopOpen}
+                                    </ExternalLink>
+                                )}
+                                <ExternalLink href={phase.url} prominent={phase.access === "morty"}>
                                     {phase.access === "vscode" ? chatCopy.vscodeOpen : chatCopy.open}
                                 </ExternalLink>
                                 <p className="text-sm text-stone-600 dark:text-stone-400">

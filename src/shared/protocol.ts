@@ -269,6 +269,15 @@ export function mortyUrl(value: string): string {
     return url.href;
 }
 
+export const VSCODE_DESKTOP_WORKSPACE = "ezshare.code-workspace";
+
+/** Opens the generated workspace beside the remote folder, without another machine or folder picker. */
+export function vscodeDesktopUrl(value: string): string {
+    const url = new URL(vscodeUrl(value));
+    const remoteHome = url.pathname.slice("/tunnel/".length, url.pathname.lastIndexOf("/"));
+    return `vscode://vscode-remote/tunnel+${remoteHome}/${VSCODE_DESKTOP_WORKSPACE}`;
+}
+
 export function vscodeUrl(value: string): string {
     const url = parseUrl(value);
     if (

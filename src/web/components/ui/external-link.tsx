@@ -7,15 +7,17 @@ export function ExternalLink({
     href,
     children,
     prominent = false,
+    destination = "browser",
 }: {
     readonly href: string;
     readonly children: ReactNode;
     readonly prominent?: boolean;
+    readonly destination?: "browser" | "application";
 }) {
     return (
         <a
             href={href}
-            target="_blank"
+            target={destination === "browser" ? "_blank" : undefined}
             rel="noopener noreferrer"
             referrerPolicy="no-referrer"
             className={cn(
@@ -26,7 +28,9 @@ export function ExternalLink({
             )}
         >
             {children}
-            <span className="sr-only"> (opens in a new tab)</span>
+            <span className="sr-only">
+                {destination === "browser" ? " (opens in a new tab)" : " (opens an external application)"}
+            </span>
         </a>
     );
 }
