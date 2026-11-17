@@ -19,49 +19,7 @@ if (process.argv[2] === "restore") {
     }
 } else {
     await probe().catch((error) => {
-        let output = "";
-        if (error instanceof Error && error.cause !== null && typeof error.cause === "object") {
-            for (const name of ["stdout", "stderr"]) {
-                if (typeof error.cause[name] === "string") {
-                    output += error.cause[name];
-                }
-            }
-        }
-        const signals = [
-            "ERR_MODULE_NOT_FOUND",
-            "ERR_PACKAGE_PATH_NOT_EXPORTED",
-            "EACCES",
-            "ENOENT",
-            "ACTIONS_RUNTIME_TOKEN",
-            "ACTIONS_RESULTS_URL",
-            "read-only",
-            "Cache reservation failed",
-            "Unable to reserve",
-            "401",
-            "403",
-            "404",
-            "tar failed",
-            "TypeError",
-            "ValidationError",
-            "invalid_args",
-            "not_committed",
-            "exception",
-        ].filter((code) => output.includes(code));
-        console.error(
-            JSON.stringify({
-                event: "checkpoint.probe",
-                stage: "failed",
-                code: toAppError(error).code,
-                signals,
-                runtime: Boolean(process.env.ACTIONS_RUNTIME_TOKEN),
-                endpoint: Boolean(process.env.ACTIONS_RESULTS_URL),
-                outputBytes: output.length,
-                exit:
-                    error instanceof Error && error.cause && typeof error.cause.code === "number"
-                        ? error.cause.code
-                        : null,
-            }),
-        );
+        console.error(JSON.stringify({ event: "checkpoint.probe", stage: "failed", code: toAppError(error).code }));
         process.exitCode = 1;
     });
 }

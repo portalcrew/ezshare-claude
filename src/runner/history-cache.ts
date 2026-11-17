@@ -14,6 +14,16 @@ export interface HistoryCache {
     readonly remove: (key: string, signal: AbortSignal) => Promise<void>;
 }
 
+const failureSchema = v.object({
+    checkpointUpload: v.picklist(["invalid_args", "not_committed", "exception"]),
+    name: v.optional(
+        v.picklist(["Error", "TypeError", "ValidationError", "CacheWriteDeniedError", "AbortError", "other"]),
+    ),
+    code: v.optional(
+        v.picklist(["ENOENT", "EACCES", "ERR_INVALID_URL", "ERR_INVALID_ARG_TYPE", "runtime_missing", "other"]),
+    ),
+});
+
 export function createActionsHistoryCache(
     context: ActionsContext,
     environment: StepEnvironment,
@@ -69,32 +79,9 @@ export function createActionsHistoryCache(
                     failure: "github_unavailable",
                     signal,
                     onFailure: ({ stdout, exitCode }) => {
-                        const schema = v.object({
-                            checkpointUpload: v.picklist(["invalid_args", "not_committed", "exception"]),
-                            name: v.optional(
-                                v.picklist([
-                                    "Error",
-                                    "TypeError",
-                                    "ValidationError",
-                                    "CacheWriteDeniedError",
-                                    "AbortError",
-                                    "other",
-                                ]),
-                            ),
-                            code: v.optional(
-                                v.picklist([
-                                    "ENOENT",
-                                    "EACCES",
-                                    "ERR_INVALID_URL",
-                                    "ERR_INVALID_ARG_TYPE",
-                                    "runtime_missing",
-                                    "other",
-                                ]),
-                            ),
-                        });
                         for (const line of stdout.split("\n")) {
                             try {
-                                const parsed = v.safeParse(schema, parseJson(line));
+                                const parsed = v.safeParse(failureSchema, parseJson(line));
                                 if (parsed.success) {
                                     diagnostics({
                                         event: "history.cache_failed",
