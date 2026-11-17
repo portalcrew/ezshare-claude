@@ -176,15 +176,19 @@ export type ConnectionFormCopy = typeof connectionFormCopy;
 
 export const workspaceCopy = {
     identity: {
-        beforeLogin: "GitHub identity verified as ",
-        beforeRepository: " for ",
+        beforeLogin: "GitHub: ",
+        beforeRepository: " · ",
     },
     disconnect: "Disconnect",
     identityHint:
         "This verifies your identity and repository access. Session and account-sharing permissions are checked when you use them.",
-    publicTitle: "This repository is public",
-    publicBody:
-        "Anyone can see when sessions start and end. What you type, links and tokens are encrypted between your browser and your session.",
+    publicTitle: "Public repository · Privacy details",
+    privateTitle: "Privacy and access",
+    privateBody: "Session activity is visible to people with repository access.",
+    historyPrivacy: "Saved conversations and workspaces are encrypted with a key kept in this browser.",
+    accountPrivacy:
+        "The Claude credential is shared with repository members. People who can change workflow code control what runs in your session.",
+    publicBody: "Anyone can see when sessions start and end.",
     sections: "Sections",
     pages: {
         use: "Use the team account",
@@ -214,7 +218,7 @@ export const chatCopy = {
     title: "Your Claude session",
     refresh: "Refresh now",
     loading: "Checking your session…",
-    intro: `Start a private Claude session that uses the team account. A session lasts up to ${chatLifetime} and ends early after ${chatIdleStop} without a message. When it ends, your conversation and workspace are encrypted with a key that only this browser keeps, and the next session continues from them.`,
+    intro: `Use the team's Claude account in a personal workspace. Sessions last up to ${chatLifetime}.`,
     replacingHistory:
         "Your next session starts with an empty history and saves it in place of the one this browser cannot read.",
     start: "Start a session",
@@ -233,33 +237,38 @@ export const chatCopy = {
         afterElapsed:
             ". The first start usually takes two to four minutes. Keep this launcher open until ready so it can unlock your personal state. You can close it after that.",
     },
-    readyAnnouncement: "Your session is ready.",
-    readyTitle: "Your session is ready",
-    readyBody: "Claude is running with the team account in a workspace only you can reach.",
+    readyTitle: "Ready",
     access: "Open with",
-    accessMorty: "Morty",
-    accessVscode: "VS Code",
-    accessHint: "Choose an interface for the next session. Both use your saved Claude conversation and workspace.",
+    clients: { morty: "Morty", vscode: "VS Code · Browser", "vscode-desktop": "VS Code · Desktop" },
+    changeClient: "Change access method",
+    clientHint: "Your choice is remembered in this browser.",
+    switchClientHint: "Switching access methods keeps this session running.",
+    estimatedTime: "Estimated time left",
+    idleHint: `Ends earlier after ${chatIdleStop} without a message.`,
+    saveHint: "Your conversation and workspace are encrypted when this session ends.",
+    forceStopHint: "Use only if saving is stuck. Unsaved changes may be lost; the previous saved history is kept.",
+    savingHelp: "Saving taking too long?",
+    stoppingForced: "Stopping immediately. Changes may not be saved.",
+    desktopHelp:
+        "Browser traffic is configured to use the runner. Choose View → Browser in desktop VS Code and check the remote indicator.",
+    webHelp: "Sign in with the GitHub account you authorized, then choose a conversation in the Claude Code extension.",
     vscodeAuthorizationTitle: "Authorize VS Code",
     vscodeAuthorizationWaiting: "Waiting for GitHub authorization. This page updates automatically.",
-    vscodeReadyBody: "Your private workspace is ready in VS Code.",
     vscodeAuthorizationHint:
         "Open GitHub, enter this code, and approve Visual Studio Code. Use the same GitHub account when opening VS Code. Your Claude account does not need another login.",
     vscodeAuthorize: "Authorize VS Code",
     vscodeOpen: "Open VS Code in browser",
     vscodeDesktopOpen: "Open in desktop VS Code",
-    vscodeReadyHint:
-        "Open the Claude Code extension and choose a conversation from its history. Desktop browsing is preconfigured: choose View → Browser and check the remote indicator. Use the GitHub account you authorized. End this session here to save.",
     open: "Open chat",
-    readyHint: `Anyone with this link can use your session until it ends, so do not share it. The session ends after ${chatLifetime}, or after ${chatIdleStop} without a message. End it here when you are done, so your history is saved.`,
-    end: "End session",
-    stoppingAnnouncement: "Ending your session.",
-    stopping: "Ending your session…",
-    forceStop: "End immediately (skips cleanup)",
+    readyHint: "This link gives access to your session. Keep it private.",
+    end: "Save and end session",
+    endWithoutSave: "End session",
+    stopping: "Saving and ending your session…",
+    forceStop: "Force stop without saving",
     failedTitle: "Your last session ended with a problem",
     history: {
         restored: "Your previous conversation and workspace are restored.",
-        new: "This is your first saved session; its history is kept when it ends.",
+        new: "New workspace. Your history will be saved when you end this session.",
         off: "History is off for this session, because this page was closed while it started.",
         unreadableTitle: "Your saved history could not be opened",
         unreadable:
@@ -280,7 +289,7 @@ export function chatOutcomeText(outcome: ChatOutcome): string {
         case "stopped":
             return outcome.history === "archived"
                 ? "Your last session ended. Its history is saved for your next session."
-                : "Your last session ended. Its history was not saved.";
+                : "Your last session ended. Its history was not saved. Any previous saved history is unchanged.";
         case "expired":
             return "Your last session reached its time limit and ended.";
         case "failed":

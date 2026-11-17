@@ -67,7 +67,18 @@ interface HistorySettings {
 
 const historySchema = v.strictObject({ version: v.literal(1), key: historyKeySchema, mode: historyModeSchema });
 
+export const sessionClientSchema = v.picklist(["morty", "vscode", "vscode-desktop"]);
+export type SessionClient = v.InferOutput<typeof sessionClientSchema>;
+const clientPreferenceSchema = v.strictObject({ version: v.literal(1), client: sessionClientSchema });
+
 export interface Vault {
+    readonly loadSessionClient: (repository: string, userId: string, signal: AbortSignal) => Promise<SessionClient>;
+    readonly saveSessionClient: (
+        repository: string,
+        userId: string,
+        client: SessionClient,
+        signal: AbortSignal,
+    ) => Promise<void>;
     readonly saveConnection: (connection: SavedConnection, signal: AbortSignal) => Promise<void>;
     readonly loadConnection: (signal: AbortSignal) => Promise<SavedConnection | null>;
     readonly forgetConnection: (signal: AbortSignal) => Promise<void>;
@@ -112,7 +123,14 @@ export function createBrowserVault(apiOrigin: string): Vault {
     const getSealed = async (slot: string, signal: AbortSignal) => openFrom(await vaultKey(signal), slot, signal);
     const saveHistory = (repository: string, userId: string, settings: HistorySettings, signal: AbortSignal) =>
         putSealed(historySlot(repository, userId), { version: 1, ...settings }, signal);
+    const clientSlot = (repository: string, userId: string) => `client:${repository}:${userId}`;
     return {
+        loadSessionClient: async (repository, userId, signal) => {
+            const record = v.safeParse(clientPreferenceSchema, await get(clientSlot(repository, userId), signal));
+            return record.success ? record.output.client : "morty";
+        },
+        saveSessionClient: (repository, userId, client, signal) =>
+            put(clientSlot(repository, userId), { version: 1, client }, signal),
         saveConnection: (connection, signal) => putSealed(connectionSlot, connection, signal),
         loadConnection: async (signal) => {
             const connection = v.safeParse(connectionSchema, await getSealed(connectionSlot, signal));

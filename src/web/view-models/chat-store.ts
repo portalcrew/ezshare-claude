@@ -11,12 +11,10 @@ import {
     type HistoryEnd,
     type HistoryStart,
     mortyUrl,
-    type SessionAccess,
-    sessionAccessSchema,
     vscodeDesktopUrl,
     vscodeUrl,
 } from "../../shared/protocol.ts";
-import type { PendingSession } from "../services/vault.ts";
+import { type PendingSession, type SessionClient, sessionClientSchema } from "../services/vault.ts";
 import {
     abandonSession,
     beginSession,
@@ -62,7 +60,7 @@ export type ChatPhase =
     | { readonly kind: "stopping"; readonly session: PendingSession; readonly forced: boolean };
 
 /** User commands in flight; the view disables the matching controls. */
-export type ChatCommand = "start" | "stop" | "force_stop" | "cancel_run" | "replace_history" | null;
+export type ChatCommand = "start" | "stop" | "force_stop" | "cancel_run" | "replace_history" | "choose_client" | null;
 
 export interface ChatState {
     readonly phase: ChatPhase;
@@ -74,14 +72,15 @@ export interface ChatState {
     /** The next session will save its history over an archive this browser cannot read. */
     readonly replacingHistory: boolean;
     readonly newMortyIdentity: boolean;
-    readonly access: SessionAccess;
+    /** How this browser prefers to open a session; it is independent of the active runner. */
+    readonly client: SessionClient;
 }
 
 export interface ChatActions {
     readonly open: () => void;
     readonly close: () => void;
     readonly start: () => void;
-    readonly setAccess: (access: string) => void;
+    readonly selectClient: (client: string) => void;
     readonly setNewMortyIdentity: (selected: boolean) => void;
     readonly stop: () => void;
     readonly forceStop: () => void;
@@ -216,7 +215,8 @@ export function createChatStore(member: MemberContext) {
                     return phase satisfies never;
             }
             const history = await member.vault.history(member.repository.name, member.user.id, signal);
-            set({ phase: next, problem: null, replacingHistory: history.mode === "replace" });
+            const client = await member.vault.loadSessionClient(member.repository.name, member.user.id, signal);
+            set({ phase: next, problem: null, replacingHistory: history.mode === "replace", client });
         };
 
         const idleOrBusy = async (outcome: ChatOutcome | null, signal: AbortSignal): Promise<ChatPhase> => {
@@ -247,13 +247,23 @@ export function createChatStore(member: MemberContext) {
             problem: null,
             commandError: null,
             replacingHistory: false,
-            access: "morty",
+            client: "morty",
             newMortyIdentity: false,
-            setAccess: (access) => {
-                if (v.is(sessionAccessSchema, access) && get().phase.kind === "idle" && get().command === null) {
-                    set({ access, newMortyIdentity: false });
-                }
-            },
+            selectClient: (value) =>
+                command("choose_client", async (signal) => {
+                    const phase = get().phase;
+                    if (
+                        !v.is(sessionClientSchema, value) ||
+                        !(
+                            phase.kind === "idle" ||
+                            (phase.kind === "ready" && phase.access === "vscode" && value !== "morty")
+                        )
+                    ) {
+                        return;
+                    }
+                    await member.vault.saveSessionClient(member.repository.name, member.user.id, value, signal);
+                    set({ client: value, newMortyIdentity: false });
+                }),
             setNewMortyIdentity: (selected) => {
                 if (get().phase.kind === "idle" && get().command === null) {
                     set({ newMortyIdentity: selected });
@@ -272,7 +282,7 @@ export function createChatStore(member: MemberContext) {
                         throw new AppError("session_busy");
                     }
                     const newMortyIdentity = get().newMortyIdentity;
-                    const access = get().access;
+                    const access = get().client === "morty" ? "morty" : "vscode";
                     set({ phase: { kind: "starting" } });
                     try {
                         const session = await beginSession(member, "chat", signal, { newMortyIdentity, access });

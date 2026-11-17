@@ -1,29 +1,32 @@
+import type { ReactNode } from "react";
 import { useStore } from "zustand";
-import type { HistoryStart } from "../../shared/protocol.ts";
-import { ElapsedTime } from "../components/elapsed-time.tsx";
+import type { Clock } from "../../shared/async.ts";
+import { type HistoryStart, lifetime } from "../../shared/protocol.ts";
+import { ElapsedTime, RemainingTime } from "../components/elapsed-time.tsx";
 import { ProgressSteps } from "../components/progress-steps.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { Card } from "../components/ui/card.tsx";
 import { ExternalLink } from "../components/ui/external-link.tsx";
 import { Announcer, Notice } from "../components/ui/notice.tsx";
-import type { ChatOutcome, ChatStore } from "../view-models/chat-store.ts";
+import type { SessionClient } from "../services/vault.ts";
+import type { ChatOutcome, ChatPhase, ChatStore } from "../view-models/chat-store.ts";
 import { blockingRunLabel, chatCopy, chatOutcomeText, commonCopy, errorMessage } from "../view-models/copy.ts";
 
 /** The member's personal Claude session. */
 export function ChatView({
     store,
     repository,
-    now,
+    clock,
 }: {
     readonly store: ChatStore;
     readonly repository: string;
-    readonly now: () => number;
+    readonly clock: Clock;
 }) {
     const phase = useStore(store, (state) => state.phase);
     const command = useStore(store, (state) => state.command);
     const problem = useStore(store, (state) => state.problem);
     const commandError = useStore(store, (state) => state.commandError);
-    const access = useStore(store, (state) => state.access);
+    const client = useStore(store, (state) => state.client);
     const newMortyIdentity = useStore(store, (state) => state.newMortyIdentity);
     const replacingHistory = useStore(store, (state) => state.replacingHistory);
     const actions = store.getState();
@@ -60,23 +63,13 @@ export function ChatView({
                                 {phase.outcome !== null && <OutcomeNotice outcome={phase.outcome} />}
                                 <p className="text-sm">{chatCopy.intro}</p>
                                 {replacingHistory && <Notice tone="info">{chatCopy.replacingHistory}</Notice>}
-                                <label className="grid gap-2 text-sm font-medium">
-                                    {chatCopy.access}
-                                    <select
-                                        value={access}
-                                        disabled={command !== null}
-                                        onChange={(event) => actions.setAccess(event.currentTarget.value)}
-                                        aria-describedby="session-access-hint"
-                                        className="min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-stone-900 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
-                                    >
-                                        <option value="morty">{chatCopy.accessMorty}</option>
-                                        <option value="vscode">{chatCopy.accessVscode}</option>
-                                    </select>
-                                </label>
-                                <p id="session-access-hint" className="text-sm text-stone-600 dark:text-stone-400">
-                                    {chatCopy.accessHint}
-                                </p>
-                                {access === "morty" && (
+                                <ClientPicker
+                                    client={client}
+                                    disabled={command !== null}
+                                    onSelect={actions.selectClient}
+                                />
+                                <p className="text-sm text-stone-600 dark:text-stone-400">{chatCopy.clientHint}</p>
+                                {client === "morty" && (
                                     <div className="space-y-1">
                                         <label className="flex items-center gap-2 text-sm">
                                             <input
@@ -99,7 +92,11 @@ export function ChatView({
                                         </p>
                                     </div>
                                 )}
-                                <Button busy={command === "start"} onClick={actions.start}>
+                                <Button
+                                    busy={command === "start"}
+                                    disabled={command !== null && command !== "start"}
+                                    onClick={actions.start}
+                                >
                                     {chatCopy.start}
                                 </Button>
                             </>
@@ -146,7 +143,7 @@ export function ChatView({
                                 {phase.kind !== "starting" && (
                                     <p className="text-sm text-stone-600 dark:text-stone-400">
                                         {chatCopy.waiting.beforeElapsed}
-                                        <ElapsedTime since={phase.session.startedAt} now={now} />
+                                        <ElapsedTime since={phase.session.startedAt} clock={clock} />
                                         {chatCopy.waiting.afterElapsed}
                                     </p>
                                 )}
@@ -180,43 +177,59 @@ export function ChatView({
                     case "ready":
                         return (
                             <>
-                                <Announcer message={chatCopy.readyAnnouncement} />
-                                <Notice tone="success" title={chatCopy.readyTitle}>
-                                    {phase.access === "vscode" ? chatCopy.vscodeReadyBody : chatCopy.readyBody}
-                                </Notice>
-                                <HistoryNotice
-                                    start={phase.history}
-                                    replacing={replacingHistory}
-                                    busy={command === "replace_history"}
-                                    onReplace={actions.replaceHistory}
-                                />
-                                {phase.access === "vscode" && (
-                                    <ExternalLink href={phase.desktopUrl} destination="application" prominent>
-                                        {chatCopy.vscodeDesktopOpen}
-                                    </ExternalLink>
-                                )}
-                                <ExternalLink href={phase.url} prominent={phase.access === "morty"}>
-                                    {phase.access === "vscode" ? chatCopy.vscodeOpen : chatCopy.open}
-                                </ExternalLink>
-                                <p className="text-sm text-stone-600 dark:text-stone-400">
-                                    {phase.access === "vscode" ? chatCopy.vscodeReadyHint : chatCopy.readyHint}
-                                </p>
-                                <Button variant="danger" busy={command === "stop"} onClick={actions.stop}>
-                                    {chatCopy.end}
-                                </Button>
+                                <SessionReady
+                                    phase={phase}
+                                    client={client}
+                                    clock={clock}
+                                    busy={command !== null}
+                                    onSelect={actions.selectClient}
+                                >
+                                    <HistoryNotice
+                                        start={phase.history}
+                                        replacing={replacingHistory}
+                                        busy={command === "replace_history"}
+                                        onReplace={actions.replaceHistory}
+                                    />
+                                </SessionReady>
+                                <div className="flex flex-wrap items-center gap-3 border-t border-stone-200 pt-4 dark:border-stone-800">
+                                    <Button
+                                        variant="secondary"
+                                        busy={command === "stop"}
+                                        disabled={command !== null && command !== "stop"}
+                                        onClick={actions.stop}
+                                    >
+                                        {phase.history === "unreadable" || phase.history === "off"
+                                            ? chatCopy.endWithoutSave
+                                            : chatCopy.end}
+                                    </Button>
+                                    {phase.history !== "unreadable" && phase.history !== "off" && (
+                                        <p className="max-w-xs text-xs text-stone-600 dark:text-stone-400">
+                                            {chatCopy.saveHint}
+                                        </p>
+                                    )}
+                                </div>
                             </>
                         );
                     case "stopping":
                         return (
                             <>
-                                <Announcer message={chatCopy.stoppingAnnouncement} />
-                                <p aria-busy="true" className="text-sm">
-                                    {chatCopy.stopping}
+                                <p role="status" aria-busy="true" className="text-sm">
+                                    {phase.forced ? chatCopy.stoppingForced : chatCopy.stopping}
                                 </p>
                                 {!phase.forced && (
-                                    <Button variant="quiet" busy={command === "force_stop"} onClick={actions.forceStop}>
-                                        {chatCopy.forceStop}
-                                    </Button>
+                                    <details className="text-sm">
+                                        <summary className="min-h-11 cursor-pointer py-3 text-stone-600 dark:text-stone-400">
+                                            {chatCopy.savingHelp}
+                                        </summary>
+                                        <p className="mb-3">{chatCopy.forceStopHint}</p>
+                                        <Button
+                                            variant="danger"
+                                            busy={command === "force_stop"}
+                                            onClick={actions.forceStop}
+                                        >
+                                            {chatCopy.forceStop}
+                                        </Button>
+                                    </details>
                                 )}
                             </>
                         );
@@ -228,13 +241,114 @@ export function ChatView({
     );
 }
 
+function ClientPicker({
+    client,
+    disabled,
+    onSelect,
+    clients = ["morty", "vscode", "vscode-desktop"],
+}: {
+    readonly client: SessionClient;
+    readonly disabled: boolean;
+    readonly onSelect: (value: string) => void;
+    readonly clients?: readonly SessionClient[];
+}) {
+    return (
+        <label className="grid max-w-sm gap-2 text-sm font-medium">
+            {chatCopy.access}
+            <select
+                value={client}
+                disabled={disabled}
+                onChange={(event) => onSelect(event.currentTarget.value)}
+                className="min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-stone-900 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
+            >
+                {clients.map((item) => (
+                    <option key={item} value={item}>
+                        {chatCopy.clients[item]}
+                    </option>
+                ))}
+            </select>
+        </label>
+    );
+}
+
+function SessionReady({
+    phase,
+    client,
+    clock,
+    busy,
+    onSelect,
+    children,
+}: {
+    readonly phase: Extract<ChatPhase, { readonly kind: "ready" }>;
+    readonly client: SessionClient;
+    readonly clock: Clock;
+    readonly busy: boolean;
+    readonly onSelect: (value: string) => void;
+    readonly children: ReactNode;
+}) {
+    const desktop = phase.access === "vscode" && client === "vscode-desktop";
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm">
+                <p role="status" className="flex items-center gap-2 font-medium text-emerald-800 dark:text-emerald-300">
+                    <span aria-hidden="true" className="size-2 rounded-full bg-emerald-600" />
+                    {chatCopy.readyTitle}
+                </p>
+                <div className="text-xs text-stone-600 dark:text-stone-400">
+                    <RemainingTime
+                        until={phase.session.startedAt + lifetime("chat")}
+                        clock={clock}
+                        label={chatCopy.estimatedTime}
+                    />
+                </div>
+            </div>
+            {children}
+            <div className="flex flex-wrap items-center gap-4">
+                <ExternalLink
+                    href={desktop ? phase.desktopUrl : phase.url}
+                    destination={desktop ? "application" : "browser"}
+                    prominent
+                >
+                    {phase.access === "morty"
+                        ? chatCopy.open
+                        : desktop
+                          ? chatCopy.vscodeDesktopOpen
+                          : chatCopy.vscodeOpen}
+                </ExternalLink>
+            </div>
+            <p className="text-sm text-stone-600 dark:text-stone-400">
+                {phase.access === "morty" ? chatCopy.readyHint : desktop ? chatCopy.desktopHelp : chatCopy.webHelp}
+            </p>
+            {phase.access === "vscode" && (
+                <details className="text-sm">
+                    <summary className="min-h-11 cursor-pointer py-3 font-medium text-stone-600 dark:text-stone-400">
+                        {chatCopy.changeClient}
+                    </summary>
+                    <div className="space-y-2 pb-2">
+                        <ClientPicker
+                            client={desktop ? "vscode-desktop" : "vscode"}
+                            clients={["vscode", "vscode-desktop"]}
+                            disabled={busy}
+                            onSelect={onSelect}
+                        />
+                        <p className="text-stone-600 dark:text-stone-400">{chatCopy.switchClientHint}</p>
+                    </div>
+                </details>
+            )}
+            <p className="text-xs text-stone-600 dark:text-stone-400">{chatCopy.idleHint}</p>
+        </div>
+    );
+}
+
 function OutcomeNotice({ outcome }: { readonly outcome: ChatOutcome }) {
     return outcome.kind === "failed" ? (
         <Notice tone="error" title={chatCopy.failedTitle}>
             {chatOutcomeText(outcome)}
         </Notice>
     ) : (
-        <Notice tone="info">{chatOutcomeText(outcome)}</Notice>
+        <Notice tone={outcome.kind === "stopped" && outcome.history === "not_archived" ? "warning" : "info"}>
+            {chatOutcomeText(outcome)}
+        </Notice>
     );
 }
 

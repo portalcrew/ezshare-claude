@@ -36,7 +36,7 @@ async function endSession(current: TestApp): Promise<string> {
     if (run === undefined) {
         throw new Error("Expected the session run");
     }
-    await current.user.click(getByRole(body, "button", { name: "End session" }));
+    await current.user.click(getByRole(body, "button", { name: /^(Save and end session|End session)$/u }));
     await current.eventually(() => getByRole(body, "button", { name: "Start a session" }));
     const message = getByRole(body, "status").textContent ?? "";
     // The stopped message precedes the workflow's cache-save step.
@@ -57,7 +57,7 @@ test("Given a member ended a session, When she starts the next one, Then it cont
     await connect(app, tokens.alice);
 
     const first = await runSession(app);
-    expect(getByRole(body, "main").textContent).toContain("first saved session");
+    expect(getByRole(body, "main").textContent).toContain("New workspace.");
     expect(await endSession(app)).toContain("Its history is saved for your next session");
     expect([...app.actions.cache.keys()]).toEqual([`ezshare-history-${alice.id}-run-${first.runId}`]);
 
@@ -97,7 +97,7 @@ test("Given history saved from another browser, When the member starts a session
     expect(app.actions.cache.size).toBe(1);
 
     const third = await runSession(app);
-    expect(getByRole(body, "main").textContent).toContain("first saved session");
+    expect(getByRole(body, "main").textContent).toContain("New workspace.");
     expect(await endSession(app)).toContain("Its history is saved");
     expect(app.actions.cache.size).toBe(2);
 

@@ -24,7 +24,7 @@ export function mountLauncher(root: HTMLElement, options: LauncherOptions = {}):
     const view = createRoot(root);
     view.render(
         <StrictMode>
-            <RootView store={store} now={clock.now} defaultRepository={defaultRepository} />
+            <RootView store={store} clock={clock} defaultRepository={defaultRepository} />
         </StrictMode>,
     );
     store.getState().open();

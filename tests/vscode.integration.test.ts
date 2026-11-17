@@ -57,7 +57,7 @@ test("Given a member authorizes VS Code, When she reloads, restarts VS Code and 
         throw new Error("Expected the personal workspace");
     }
     await expect(access(join(home, "workspace", ".vscode", "settings.json"))).rejects.toMatchObject({ code: "ENOENT" });
-    expect(getByText(body, /Open the Claude Code extension and choose a conversation/u)).toBeTruthy();
+    expect(getByText(body, /choose a conversation in the Claude Code extension/u)).toBeTruthy();
     await mkdir(join(home, "workspace", ".vscode"), { recursive: true });
     const memberSettings = '// My existing VS Code settings\n{"terminal.integrated.defaultProfile.linux":"bash",}\n';
     await writeFile(join(home, "workspace", ".vscode", "settings.json"), memberSettings);
@@ -67,7 +67,7 @@ test("Given a member authorizes VS Code, When she reloads, restarts VS Code and 
             expect(entry.names).not.toContain("CLAUDE_CODE_OAUTH_TOKEN");
         }
     }
-    await app.user.click(getByRole(body, "button", { name: "End session" }));
+    await app.user.click(getByRole(body, "button", { name: "Save and end session" }));
     await app.eventually(() => getByRole(body, "button", { name: "Start a session" }));
     await app.user.selectOptions(getByRole(body, "combobox", { name: "Open with" }), "vscode");
     await app.user.click(getByRole(body, "button", { name: "Start a session" }));
@@ -78,7 +78,7 @@ test("Given a member authorizes VS Code, When she reloads, restarts VS Code and 
     expect(await readFile(join(home, "workspace", ".vscode", "settings.json"), "utf8")).toBe(memberSettings);
     expect(await readFile(join(home, "workspace", "vscode-notes.txt"), "utf8")).toBe("workspace from vscode\n");
     expect(getByText(body, "Your previous conversation and workspace are restored.")).toBeTruthy();
-    await app.user.click(getByRole(body, "button", { name: "End session" }));
+    await app.user.click(getByRole(body, "button", { name: "Save and end session" }));
     await app.eventually(() => getByRole(body, "button", { name: "Start a session" }));
     await app.user.selectOptions(getByRole(body, "combobox", { name: "Open with" }), "morty");
     await app.user.click(getByRole(body, "button", { name: "Start a session" }));
@@ -155,7 +155,7 @@ test("Given the earlier generated Claude terminal profile, When a member opens V
             "terminal.integrated.defaultProfile.linux": "Ezshare Claude",
         }),
     );
-    await app.user.click(getByRole(body, "button", { name: "End session" }));
+    await app.user.click(getByRole(body, "button", { name: "Save and end session" }));
     await app.eventually(() => getByRole(body, "button", { name: "Start a session" }));
     await app.user.selectOptions(getByRole(body, "combobox", { name: "Open with" }), "vscode");
     await app.user.click(getByRole(body, "button", { name: "Start a session" }));
@@ -175,7 +175,7 @@ test("Given a ready VS Code session, When a member chooses the desktop entry, Th
     await connect(app, tokens.alice);
     await app.user.selectOptions(
         await app.eventually(() => getByRole(body, "combobox", { name: "Open with" })),
-        "vscode",
+        "vscode-desktop",
     );
     await app.user.click(getByRole(body, "button", { name: "Start a session" }));
     await app.eventually(() => getByText(body, "ABCD-EFGH"));
@@ -190,9 +190,7 @@ test("Given a ready VS Code session, When a member chooses the desktop entry, Th
     expect(href).toMatch(/^vscode:\/\/vscode-remote\/tunnel\+ez-[a-f0-9]{16}\/.*\/ezshare\.code-workspace$/u);
     expect(href).toContain(`${home}/ezshare.code-workspace`);
     expect(desktop.getAttribute("target")).toBeNull();
-    expect(getByRole(body, "link", { name: /Open VS Code/u }).getAttribute("href")).toMatch(
-        /^https:\/\/vscode.dev\/tunnel\//u,
-    );
+    expect(queryByRole(body, "link", { name: /Open VS Code in browser/u })).toBeNull();
     const workspace: unknown = JSON.parse(await readFile(join(home, "ezshare.code-workspace"), "utf8"));
     expect(workspace).toEqual({
         folders: [{ path: join(home, "workspace") }],
@@ -207,6 +205,6 @@ test("Given a ready VS Code session, When a member chooses the desktop entry, Th
             "href",
         ),
     ).toBe(href);
-    await app.user.click(getByRole(body, "button", { name: "End session" }));
+    await app.user.click(getByRole(body, "button", { name: "Save and end session" }));
     await app.eventually(() => getByRole(body, "button", { name: "Start a session" }));
 });

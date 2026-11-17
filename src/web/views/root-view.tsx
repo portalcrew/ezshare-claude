@@ -1,4 +1,5 @@
 import { useStore } from "zustand";
+import type { Clock } from "../../shared/async.ts";
 import { isAccessDenied } from "../../shared/errors.ts";
 import { ConnectionForm } from "../components/connection-form.tsx";
 import { Button } from "../components/ui/button.tsx";
@@ -22,11 +23,11 @@ const PAGES: readonly Page[] = ["use", "share"];
 
 export function RootView({
     store,
-    now,
+    clock,
     defaultRepository,
 }: {
     readonly store: ApplicationStore;
-    readonly now: () => number;
+    readonly clock: Clock;
     readonly defaultRepository: string;
 }) {
     const phase = useStore(store, (state) => state.phase);
@@ -35,14 +36,20 @@ export function RootView({
     return (
         <div className="mx-auto max-w-2xl space-y-8 px-5 py-10 sm:py-16">
             <header className="space-y-3">
-                <p className="text-xs font-bold tracking-[0.16em] text-emerald-800 uppercase dark:text-emerald-300">
-                    {launcherCopy.product}
-                </p>
-                <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{launcherCopy.headline}</h1>
-                <p className="text-stone-600 dark:text-stone-400">{launcherCopy.tagline}</p>
+                {phase.kind === "connected" ? (
+                    <h1 className="text-xl font-semibold tracking-tight">{launcherCopy.product}</h1>
+                ) : (
+                    <>
+                        <p className="text-xs font-bold tracking-[0.16em] text-emerald-800 uppercase dark:text-emerald-300">
+                            {launcherCopy.product}
+                        </p>
+                        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{launcherCopy.headline}</h1>
+                        <p className="text-stone-600 dark:text-stone-400">{launcherCopy.tagline}</p>
+                    </>
+                )}
             </header>
             {phase.kind === "connected" ? (
-                <Connected workspace={phase.workspace} page={page} store={store} now={now} />
+                <Connected workspace={phase.workspace} page={page} store={store} clock={clock} />
             ) : (
                 <section aria-label={connectCopy.title} className="space-y-5">
                     <h2 className="text-xl font-semibold">{connectCopy.title}</h2>
@@ -75,34 +82,28 @@ function Connected({
     workspace,
     page,
     store,
-    now,
+    clock,
 }: {
     readonly workspace: Workspace;
     readonly page: Page;
     readonly store: ApplicationStore;
-    readonly now: () => number;
+    readonly clock: Clock;
 }) {
     const actions = store.getState();
     return (
         <>
-            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                <p>
+            <div className="flex items-center justify-between gap-4 text-sm">
+                <p className="min-w-0 break-words">
                     {workspaceCopy.identity.beforeLogin}
                     <strong>{workspace.user.login}</strong>
                     {workspaceCopy.identity.beforeRepository}
                     <strong>{workspace.repository.name}</strong>
                 </p>
-                <Button variant="quiet" onClick={actions.disconnect}>
+                <Button variant="quiet" className="shrink-0" onClick={actions.disconnect}>
                     {workspaceCopy.disconnect}
                 </Button>
             </div>
-            <p className="text-sm text-stone-600 dark:text-stone-400">{workspaceCopy.identityHint}</p>
             <TokenAccessNotice workspace={workspace} onReplace={actions.disconnect} />
-            {!workspace.repository.isPrivate && (
-                <Notice tone="info" title={workspaceCopy.publicTitle}>
-                    {workspaceCopy.publicBody}
-                </Notice>
-            )}
             <nav
                 aria-label={workspaceCopy.sections}
                 className="flex gap-2 border-b border-stone-200 dark:border-stone-800"
@@ -120,11 +121,22 @@ function Connected({
                 ))}
             </nav>
             <div hidden={page !== "use"}>
-                <ChatView store={workspace.chat} repository={workspace.repository.name} now={now} />
+                <ChatView store={workspace.chat} repository={workspace.repository.name} clock={clock} />
             </div>
             <div hidden={page !== "share"}>
                 <SharingView store={workspace.sharing} branchProtected={workspace.branchProtected} />
             </div>
+            <details className="text-sm text-stone-600 dark:text-stone-400">
+                <summary className="min-h-11 cursor-pointer py-3 font-medium">
+                    {workspace.repository.isPrivate ? workspaceCopy.privateTitle : workspaceCopy.publicTitle}
+                </summary>
+                <div className="space-y-2 pb-3">
+                    <p>{workspace.repository.isPrivate ? workspaceCopy.privateBody : workspaceCopy.publicBody}</p>
+                    <p>{workspaceCopy.historyPrivacy}</p>
+                    <p>{workspaceCopy.accountPrivacy}</p>
+                    <p>{workspaceCopy.identityHint}</p>
+                </div>
+            </details>
         </>
     );
 }

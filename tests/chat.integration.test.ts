@@ -40,7 +40,7 @@ test("Given a connected member, When she starts a session and later ends it, The
         expect(entry.names).not.toContain("RUNNER_TEMP");
     }
 
-    await app.user.click(getByRole(body, "button", { name: "End session" }));
+    await app.user.click(getByRole(body, "button", { name: "Save and end session" }));
     await app.eventually(() => getByRole(body, "button", { name: "Start a session" }));
     expect(getByRole(body, "status").textContent).toContain("Your last session ended");
     expect(queryByRole(body, "link", { name: /Open chat/u })).toBeNull();
@@ -408,7 +408,7 @@ test("Given a temporarily unavailable Morty service, When setup runs again, Then
     await connect(app, tokens.alice);
     await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
     await app.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
-    await app.user.click(getByRole(body, "button", { name: "End session" }));
+    await app.user.click(getByRole(body, "button", { name: "Save and end session" }));
     await app.eventually(() => getByRole(body, "button", { name: "Start a session" }));
     const job = [...app.actions.jobs.values()][0];
     if (job === undefined) {

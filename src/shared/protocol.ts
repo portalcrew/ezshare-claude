@@ -3,7 +3,7 @@ import { AppError } from "./errors.ts";
 
 /** A session is one workflow run that serves exactly one purpose for one member. */
 export type Purpose = "chat" | "login";
-export const sessionAccessSchema = v.picklist(["morty", "vscode"]);
+const sessionAccessSchema = v.picklist(["morty", "vscode"]);
 export type SessionAccess = v.InferOutput<typeof sessionAccessSchema>;
 
 const CHAT_LIFETIME_MS = 4 * 60 * 60_000;

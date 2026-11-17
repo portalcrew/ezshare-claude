@@ -26,7 +26,7 @@ test("Given a connected member, When she reloads, Then she stays connected; When
     const body = document.body;
     await connect(app, tokens.alice);
     await app.eventually(() => getByText(body, "alice"));
-    expect(getByText(body, "This repository is public")).toBeTruthy();
+    expect(getByText(body, "Public repository · Privacy details")).toBeTruthy();
 
     app.reload();
     await app.eventually(() => getByRole(body, "button", { name: "Disconnect" }));
