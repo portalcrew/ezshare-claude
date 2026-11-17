@@ -248,7 +248,7 @@ export const chatCopy = {
     switchClientHint: "Switching access methods keeps this session running.",
     estimatedTime: "Estimated time left",
     idleHint: `Ends earlier after ${chatIdleStop} without a message.`,
-    saveHint: "Your conversation and workspace are encrypted when this session ends.",
+    saveHint: "Encrypted saves run after startup, every five minutes, and when you end this session.",
     forceStopHint: "Use only if saving is stuck. Unsaved changes may be lost; the previous saved history is kept.",
     savingHelp: "Saving taking too long?",
     stoppingForced: "Stopping immediately. Changes may not be saved.",

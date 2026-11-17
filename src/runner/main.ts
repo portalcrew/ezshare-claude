@@ -7,6 +7,7 @@ import { prepareChannelKey } from "./channel-key.ts";
 import { runChat } from "./chat.ts";
 import { readActionsContext } from "./context.ts";
 import { writeDiagnostics } from "./diagnostics.ts";
+import { createActionsHistoryCache } from "./history-cache.ts";
 import { runLogin } from "./login.ts";
 
 /**
@@ -34,7 +35,16 @@ async function main(args: readonly string[], signal: AbortSignal): Promise<unkno
                 throw new AppError("invalid_input");
             }
             const context = await readActionsContext(process.env, command, signal);
-            await (command === "chat" ? runChat : runLogin)(context, process.env, ports, signal);
+            if (command === "chat") {
+                await runChat(
+                    context,
+                    process.env,
+                    { ...ports, historyCache: createActionsHistoryCache(context, process.env) },
+                    signal,
+                );
+            } else {
+                await runLogin(context, process.env, ports, signal);
+            }
             return { kind: "session_ended", purpose: command };
         }
         case "status": {

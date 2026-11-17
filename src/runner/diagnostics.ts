@@ -118,6 +118,13 @@ export type MortyFailureCode =
  * links, authorization codes or conversation content.
  */
 export type DiagnosticRecord =
+    | { readonly event: "history.checkpoint"; readonly outcome: "saved"; readonly sequence: number }
+    | {
+          readonly event: "history.checkpoint";
+          readonly outcome: "failed" | "cleanup_failed";
+          readonly sequence: number;
+          readonly code: ErrorCode;
+      }
     | {
           readonly event: "session.stage";
           readonly stage:

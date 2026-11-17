@@ -52,7 +52,7 @@ test("Given a ready session, When nobody uses it for 15 minutes, Then the run en
     expect(idle).toBeLessThan(30 * MINUTE);
     expect(getByRole(body, "status").textContent).toContain("Its history is saved");
     await current.eventually(() => expect(run.conclusion).toBe("success"));
-    expect(current.actions.cache.size).toBe(1);
+    expect([...current.actions.cache.keys()].filter((key) => !key.includes("-checkpoint-"))).toHaveLength(1);
 });
 
 test("Given a member keeps chatting, When more than an hour passes, Then the session is still running", async () => {

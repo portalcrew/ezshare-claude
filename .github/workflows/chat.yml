@@ -39,7 +39,7 @@ on:
 
 permissions:
   contents: read
-  actions: read
+  actions: write
   issues: write
 
 # One session per member at a time; members never wait on each other.

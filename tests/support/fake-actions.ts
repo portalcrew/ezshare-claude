@@ -6,7 +6,7 @@ import { runChat } from "../../src/runner/chat.ts";
 import { historyArchivePath, readActionsContext } from "../../src/runner/context.ts";
 import type { DiagnosticRecord } from "../../src/runner/diagnostics.ts";
 import { runLogin } from "../../src/runner/login.ts";
-import { toAppError } from "../../src/shared/errors.ts";
+import { AppError, throwIfCancelled, toAppError } from "../../src/shared/errors.ts";
 import { ACTIONS_BOT, type FakeGitHub, type FakeRun } from "./fake-github.ts";
 import type { TestClock } from "./test-clock.ts";
 
@@ -120,20 +120,44 @@ export async function startFakeActions(
             GITHUB_API_URL: github.origin,
             GITHUB_OUTPUT: output,
             GH_TOKEN: token,
+            ACTIONS_RUNTIME_TOKEN: "fake-private-cache-runtime-token",
             RUNNER_TEMP: runnerTemp,
             EZSHARE_AGENT_USER: "ezshare-agent",
             EZSHARE_AGENT_HOME: job.agentHome,
             PATH: `${bin}:${process.env["PATH"] ?? ""}`,
             ...(purpose === "chat" && shared !== null ? { EZSHARE_CLAUDE_TOKEN: shared } : {}),
         };
-        const ports = { clock: options.clock, diagnostics: (record: DiagnosticRecord) => job.diagnostics.push(record) };
+        const ports = {
+            clock: options.clock,
+            diagnostics: (record: DiagnosticRecord) => job.diagnostics.push(record),
+            historyCache: {
+                save: async (key: string, archive: string, signal: AbortSignal): Promise<void> => {
+                    throwIfCancelled(signal);
+                    if (crashed.has(run.id) || !uploadsAvailable) {
+                        throw new AppError("github_unavailable");
+                    }
+                    const saved = join(root, "cache", key);
+                    await mkdir(saved, { recursive: true });
+                    await cp(archive, join(saved, "history.bin"));
+                    cache.set(key, saved);
+                },
+                remove: async (key: string, signal: AbortSignal): Promise<void> => {
+                    throwIfCancelled(signal);
+                    cache.delete(key);
+                },
+            },
+        };
         const context = await readActionsContext(environment, purpose, run.cancel.signal);
         try {
             await (purpose === "chat" ? runChat : runLogin)(context, environment, ports, run.cancel.signal);
         } finally {
             await cp(`${job.agentHome}.agent-env.jsonl`, join(directory, "agent-env.jsonl")).catch(() => undefined);
             // actions/cache/save, `if: always() && steps.serve.outputs.history == 'archived'`; entries are immutable.
-            if (/^history=archived$/mu.test(await readFile(output, "utf8")) && !cache.has(cacheKey)) {
+            if (
+                !crashed.has(run.id) &&
+                /^history=archived$/mu.test(await readFile(output, "utf8")) &&
+                !cache.has(cacheKey)
+            ) {
                 const saved = join(root, "cache", cacheKey);
                 await cp(historyDirectory, saved, { recursive: true });
                 cache.set(cacheKey, saved);
@@ -144,6 +168,8 @@ export async function startFakeActions(
         }
     };
 
+    let uploadsAvailable = true;
+    const crashed = new Set<number>();
     const runningUsers = new Set<number>();
     const start = (run: FakeRun) => {
         if (run.status === "completed") {
@@ -210,6 +236,18 @@ export async function startFakeActions(
 
     return {
         jobs,
+        setHistoryUploadsAvailable: (available: boolean) => {
+            uploadsAvailable = available;
+        },
+        crashRunner: async (runId: number) => {
+            const job = jobs.get(runId);
+            if (job === undefined) {
+                throw new Error("Expected the runner");
+            }
+            crashed.add(runId);
+            job.run.cancel.abort(new DOMException("Runner lost", "AbortError"));
+            await job.done;
+        },
         failVscode: async (runId: number) => {
             const job = jobs.get(runId);
             if (job === undefined) {

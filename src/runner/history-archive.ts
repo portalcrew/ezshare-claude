@@ -218,7 +218,7 @@ export async function saveHistory(
         );
         const [archived, written] = await Promise.allSettled([
             streamAgentCommand(tar, { output: seal, signal, acceptExitCodes: [0, 1] }),
-            pipeline(seal, createWriteStream(partial, { mode: 0o600, flags: "wx" })),
+            pipeline(seal, createWriteStream(partial, { mode: 0o600, flags: "wx" }), { signal }),
         ]);
         if (archived.status === "rejected") {
             throw archived.reason;

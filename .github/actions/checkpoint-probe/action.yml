@@ -1,0 +1,5 @@
+name: Probe encrypted history cache
+description: Manual transport compatibility experiment using synthetic bytes only
+runs:
+  using: node24
+  main: main.mjs

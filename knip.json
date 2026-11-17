@@ -3,6 +3,7 @@
     "entry": [
         "src/web/main.tsx",
         "src/runner/main.ts",
+        "src/runner/history-cache-worker.ts",
         "scripts/*.ts",
         "tests/**/*.test.{ts,tsx}",
         "tests/support/setup.ts",

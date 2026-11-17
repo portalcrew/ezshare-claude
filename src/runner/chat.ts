@@ -1,8 +1,7 @@
-import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as v from "valibot";
 import { type Clock, cleanupSignal, withDeadline } from "../shared/async.ts";
-import { AppError, toAppError } from "../shared/errors.ts";
+import { AppError } from "../shared/errors.ts";
 import {
     CHAT_IDLE_STOP_MS,
     claudeTokenSchema,
@@ -25,11 +24,17 @@ import {
     NPM_ERROR_CODES,
     STARTUP_ERROR_CODES,
 } from "./diagnostics.ts";
-import { claudeProject, type HistoryOwner, latestSessionId, restoreHistory, saveHistory } from "./history-archive.ts";
+import { claudeProject, restoreHistory } from "./history-archive.ts";
+import type { HistoryCache } from "./history-cache.ts";
+import { HistoryCheckpoints, type SavingHistory } from "./history-checkpoints.ts";
 import { type ChatRunnerChannel, createChatChannel, type RunnerPorts, runSession } from "./session.ts";
 import { VscodeSession } from "./vscode.ts";
 
 const STOP_POLL_MS = 15_000;
+
+interface ChatPorts extends RunnerPorts {
+    readonly historyCache: HistoryCache;
+}
 
 const mortyReadySchema = v.object({
     status: v.literal("ready"),
@@ -48,7 +53,7 @@ const mortyErrorSchema = v.object({
 export async function runChat(
     context: ActionsContext,
     environment: StepEnvironment,
-    ports: RunnerPorts,
+    ports: ChatPorts,
     signal: AbortSignal,
 ): Promise<void> {
     await runSession(context, ports, signal, {
@@ -69,8 +74,13 @@ export async function runChat(
             const owner = { repository: context.repository, userId: context.userId };
             const archive = historyArchivePath(context.runnerTemp);
             // Set only once the agent's home holds exactly what may be saved over the member's archive.
-            let saving: { readonly key: string; readonly sessionId: string } | null = null;
+            let saving: SavingHistory | null = null;
             let history: HistoryEnd = "not_archived";
+            const checkpoints = new HistoryCheckpoints(context, path, {
+                clock: ports.clock,
+                diagnostics: ports.diagnostics,
+                cache: ports.historyCache,
+            });
             try {
                 await withDeadline(
                     Math.max(0, deadline - ports.clock.now()),
@@ -137,14 +147,19 @@ export async function runChat(
                             );
                         }
                         ports.diagnostics({ event: "session.stage", stage: "ready" });
-                        await waitForStop(
-                            channel,
-                            deadline,
-                            ports,
-                            async (activitySignal) => {
-                                vscode?.assertRunning();
-                                return await agent.activity(activitySignal);
-                            },
+                        await checkpoints.during(
+                            saving,
+                            () =>
+                                waitForStop(
+                                    channel,
+                                    deadline,
+                                    ports,
+                                    async (activitySignal) => {
+                                        vscode?.assertRunning();
+                                        return await agent.activity(activitySignal);
+                                    },
+                                    bounded,
+                                ),
                             bounded,
                         );
                     },
@@ -162,9 +177,7 @@ export async function runChat(
                 } else {
                     await vscode.stop();
                 }
-                if (saving !== null) {
-                    history = await archiveHistory(context, path, owner, archive, saving, ports);
-                }
+                history = await checkpoints.finish(saving);
             }
             await channel.send({ kind: "stopped", body: { history } }, cleanupSignal(10_000));
         },
@@ -173,7 +186,6 @@ export async function runChat(
 
 const HISTORY_WAIT_MS = 5 * 60_000;
 const HISTORY_POLL_MS = 3_000;
-const SAVE_TIMEOUT_MS = 6 * 60_000;
 
 /**
  * Waits for the browser's personal key before starting any Agent or Computer. A missing key must never silently
@@ -200,34 +212,6 @@ async function waitForHistory(
             throw new AppError("history_key_missing");
         }
         await ports.clock.sleep(Math.min(HISTORY_POLL_MS, until - ports.clock.now()), signal);
-    }
-}
-
-/** Archives the agent's home for the next session and tells the save step to keep it. Never fails the session. */
-async function archiveHistory(
-    context: ActionsContext,
-    path: string,
-    owner: HistoryOwner,
-    archive: string,
-    saving: { readonly key: string; readonly sessionId: string },
-    ports: RunnerPorts,
-): Promise<HistoryEnd> {
-    ports.diagnostics({ event: "session.stage", stage: "saving_history" });
-    try {
-        const signal = cleanupSignal(SAVE_TIMEOUT_MS);
-        const sessionId = await latestSessionId(
-            context.agent,
-            path,
-            agentWorkspace(context.agent),
-            saving.sessionId,
-            signal,
-        );
-        await saveHistory(archive, saving.key, owner, context.agent, path, sessionId, signal);
-        await appendFile(context.githubOutput, "history=archived\n");
-        return "archived";
-    } catch (cause) {
-        ports.diagnostics({ event: "session.failed", code: toAppError(cause).code });
-        return "not_archived";
     }
 }
 

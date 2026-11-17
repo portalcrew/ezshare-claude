@@ -24,6 +24,7 @@
         "ci:check": "pnpm typecheck && pnpm lint && pnpm knip && pnpm test && pnpm build"
     },
     "dependencies": {
+        "@actions/cache": "6.3.0",
         "@xterm/headless": "6.0.0",
         "clsx": "2.1.1",
         "libsodium-wrappers": "0.8.4",
