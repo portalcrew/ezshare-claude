@@ -65,14 +65,17 @@ for that GitHub repository and numeric user ID.
 | Original repository Secret `EZSHARE_CLAUDE_TOKEN` | Owner browser through the sealed Secrets API | GitHub's workflow caller, then the selected worker |
 | Named repository Secrets `EZSHARE_CLAUDE_ACCOUNT_<id>` | Owner browser through the sealed Secrets API | GitHub's workflow caller, then the selected worker |
 | Secret names and update times | GitHub when a credential is stored or changed | Members with Secrets read; API responses never include credential values |
-| Browser `account:<repository>:<user-id>:<request-id>` record | Launcher before dispatch; deleted when the pending session ends | Launcher when recovering the selected account or completing authorization |
+| Current page session request (memory only) | Launcher before dispatch; released when the task ends or the page closes | Launcher while polling the task, displaying its account, or storing the returned authorization in that account's Secret |
 | Runner `EZSHARE_CLAUDE_TOKEN` environment value | GitHub injects the one explicitly forwarded `claude_token` secret | Trusted session controller; only the selected Claude credential is passed to the unprivileged agent |
 
 Account identifiers contain a reversible Base32 label and a random suffix. Labels are metadata, not encrypted
 identity claims. The dispatch workflow allocates no runner and forwards one named credential to the reusable
-worker; it does not inherit the repository's Secrets context. Named pending sessions use version 2 so an old
-launcher cannot accidentally store their authorization over the original credential. Version-1 pending records
-and encrypted history archives remain compatible.
+worker; it does not inherit the repository's Secrets context. The selected account and channel key stay on the
+current page's task object. There are no browser `account:` or `pending:` writes, versioned pending-record
+readers, or task restoration after a page reload. Keep the launcher open through authorization or until you
+save and end a chat. Switching between launcher tabs preserves the current task. A new page can see and end a
+blocking run but cannot recover its private entry. Existing transient records are ignored. The encrypted
+GitHub connection, personal history key, interface preference, and saved history archive formats are unchanged.
 
 ## Setting up your fork
 
