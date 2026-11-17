@@ -54,7 +54,7 @@ Snapshot scheduling, upload failures, retention and crash recovery are covered b
 scenarios with real archive encryption and a stateful Actions simulator. The manual **History checkpoint cache
 probe** uses synthetic bytes and an isolated cache version to check the real upload/restore/delete transport;
 it does not read shared Claude credentials or personal history. The real upload, byte-for-byte restore and
-scoped cleanup passed in [Actions run 44113915786](https://github.com/portalcrew/ezshare-claude/actions/runs/44113915786).
+scoped cleanup passed in [Actions run 44114504713](https://github.com/portalcrew/ezshare-claude/actions/runs/44114504713).
 
 ## How it stays private
 
