@@ -44,7 +44,7 @@ test("Given a connected member, When she starts a session and later ends it, The
     await app.eventually(() => getByRole(body, "button", { name: "Start a session" }));
     expect(getByRole(body, "status").textContent).toContain("Your last session ended");
     expect(queryByRole(body, "link", { name: /Open chat/u })).toBeNull();
-    expect(run.conclusion).toBe("success");
+    await app.eventually(() => expect(run.conclusion).toBe("success"));
     expect((await app.actions.agentLog(run.id)).at(-1)).toMatchObject({ program: "npx", command: "stop" });
     expect(app.github.issues[0]?.state).toBe("closed");
 });
