@@ -238,3 +238,26 @@ test("Given saved conversation and Morty identity, When the member chooses a new
     expect(computer(third.url)).toBe(computer(second.url));
     expect(third.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
 });
+
+test("Given an archived Morty Computer was revoked, When the member starts again, Then only Morty identity is renewed and Claude history survives this and the next session", async () => {
+    app = await createTestApp();
+    await connect(app, tokens.alice);
+    const first = await runSession(app);
+    const home = app.actions.jobs.get(first.runId)?.agentHome;
+    if (home === undefined) {
+        throw new Error("Expected the member's agent home");
+    }
+    await writeFile(
+        join(home, "morty", "config.json"),
+        JSON.stringify({ computerId: computer(first.url), revoked: true }),
+    );
+    await endSession(app);
+    const second = await runSession(app);
+    expect(computer(second.url)).not.toBe(computer(first.url));
+    expect(second.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
+    expect(document.body.textContent).toContain("Your previous conversation and workspace are restored");
+    await endSession(app);
+    const third = await runSession(app);
+    expect(computer(third.url)).toBe(computer(second.url));
+    expect(third.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
+});

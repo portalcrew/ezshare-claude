@@ -41,6 +41,7 @@ export async function createTestApp(
             | "npm404-transient"
             | "npm404-unavailable"
             | "runtime-revoked"
+            | "computer-revoked"
             | "relay-transient"
             | "relay-unavailable";
         readonly mortyHandoff?: "legacy" | "encrypted" | "conflicting";
