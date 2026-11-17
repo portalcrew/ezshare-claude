@@ -36,7 +36,17 @@ async function endSession(current: TestApp): Promise<string> {
     if (run === undefined) {
         throw new Error("Expected the session run");
     }
-    await current.user.click(getByRole(body, "button", { name: /^(Save and end session|End session)$/u }));
+    const button = getByRole(body, "button", { name: /^(Save and end session|End session)$/u });
+    const expected = button.textContent?.includes("Save and end session")
+        ? "Saving and ending your session…"
+        : "Ending your session…";
+    await current.user.click(button);
+    const feedback = await current.eventually(() => {
+        const text = getByRole(body, "status").textContent;
+        expect(text).toMatch(/^(Saving and ending your session…|Ending your session…)$/u);
+        return text;
+    }, 0);
+    expect(feedback).toBe(expected);
     await current.eventually(() => getByRole(body, "button", { name: "Start a session" }));
     const message = getByRole(body, "status").textContent ?? "";
     // The stopped message precedes the workflow's cache-save step.

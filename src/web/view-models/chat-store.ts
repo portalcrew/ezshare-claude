@@ -57,7 +57,7 @@ export type ChatPhase =
           readonly session: PendingSession;
           readonly history: HistoryStart;
       } & ReadyEntry)
-    | { readonly kind: "stopping"; readonly session: PendingSession; readonly forced: boolean };
+    | { readonly kind: "stopping"; readonly session: PendingSession; readonly mode: "save" | "end" | "force" };
 
 /** User commands in flight; the view disables the matching controls. */
 export type ChatCommand = "start" | "stop" | "force_stop" | "cancel_run" | "replace_history" | "choose_client" | null;
@@ -152,7 +152,7 @@ export function createChatStore(member: MemberContext) {
             const observation = await observeSession(member, session, schemas, signal);
             const current = get().phase;
             const stopping = current.kind === "stopping" ? current : null;
-            if (stopping?.forced === true && (observation.kind === "queued" || observation.kind === "running")) {
+            if (stopping?.mode === "force" && (observation.kind === "queued" || observation.kind === "running")) {
                 await member.github.cancelRun(member.repository.name, observation.run.id, signal);
             }
             switch (observation.kind) {
@@ -307,14 +307,18 @@ export function createChatStore(member: MemberContext) {
                     if (observation.kind === "running" && observation.channel !== null) {
                         const stop: ChatBrowserMessage = { kind: "stop", body: {} };
                         await observation.channel.send(stop, signal);
-                        set({ phase: { kind: "stopping", session: phase.session, forced: false } });
+                        const mode =
+                            phase.kind === "ready" && (phase.history === "new" || phase.history === "restored")
+                                ? "save"
+                                : "end";
+                        set({ phase: { kind: "stopping", session: phase.session, mode } });
                         return;
                     }
                     // Nothing listens for a stop message yet: end the run instead.
                     if (observation.kind === "queued" || observation.kind === "running") {
                         await member.github.cancelRun(member.repository.name, observation.run.id, signal);
                     }
-                    set({ phase: { kind: "stopping", session: phase.session, forced: true } });
+                    set({ phase: { kind: "stopping", session: phase.session, mode: "force" } });
                 }),
             forceStop: () =>
                 command("force_stop", async (signal) => {
@@ -331,7 +335,7 @@ export function createChatStore(member: MemberContext) {
                     if (run.status !== "completed") {
                         await member.github.cancelRun(member.repository.name, run.id, signal);
                     }
-                    set({ phase: { kind: "stopping", session: phase.session, forced: true } });
+                    set({ phase: { kind: "stopping", session: phase.session, mode: "force" } });
                 }),
             replaceHistory: () =>
                 command("replace_history", async (signal) => {

@@ -263,7 +263,8 @@ export const chatCopy = {
     readyHint: "This link gives access to your session. Keep it private.",
     end: "Save and end session",
     endWithoutSave: "End session",
-    stopping: "Saving and ending your session…",
+    saving: "Saving and ending your session…",
+    stopping: "Ending your session…",
     forceStop: "Force stop without saving",
     failedTitle: "Your last session ended with a problem",
     history: {

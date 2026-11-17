@@ -214,9 +214,13 @@ export function ChatView({
                         return (
                             <>
                                 <p role="status" aria-busy="true" className="text-sm">
-                                    {phase.forced ? chatCopy.stoppingForced : chatCopy.stopping}
+                                    {phase.mode === "force"
+                                        ? chatCopy.stoppingForced
+                                        : phase.mode === "save"
+                                          ? chatCopy.saving
+                                          : chatCopy.stopping}
                                 </p>
-                                {!phase.forced && (
+                                {phase.mode !== "force" && (
                                     <details className="text-sm">
                                         <summary className="min-h-11 cursor-pointer py-3 text-stone-600 dark:text-stone-400">
                                             {chatCopy.savingHelp}
