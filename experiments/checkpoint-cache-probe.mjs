@@ -79,7 +79,7 @@ async function probe() {
     };
     const archive = historyArchivePath(context.runnerTemp);
     const key = `ezshare-history-${context.userId}-run-${context.runId}-checkpoint-${crypto.randomUUID()}`;
-    const cache = createActionsHistoryCache(context, process.env);
+    const cache = createActionsHistoryCache(context, process.env, (record) => console.error(JSON.stringify(record)));
     const bytes = randomBytes(1024);
     const signal = AbortSignal.timeout(4 * 60_000);
     try {

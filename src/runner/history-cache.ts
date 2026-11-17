@@ -3,9 +3,10 @@ import { fileURLToPath } from "node:url";
 import * as v from "valibot";
 import { AppError } from "../shared/errors.ts";
 import { GitHubHttp } from "../shared/github/http.ts";
-import { requestIdSchema } from "../shared/protocol.ts";
+import { parseJson, requestIdSchema } from "../shared/protocol.ts";
 import { runAgentCommand } from "./agent-process.ts";
 import { type ActionsContext, historyArchivePath, type StepEnvironment } from "./context.ts";
+import type { Diagnostics } from "./diagnostics.ts";
 
 /** Durable encrypted snapshots; the controller alone owns cache credentials. */
 export interface HistoryCache {
@@ -13,7 +14,11 @@ export interface HistoryCache {
     readonly remove: (key: string, signal: AbortSignal) => Promise<void>;
 }
 
-export function createActionsHistoryCache(context: ActionsContext, environment: StepEnvironment): HistoryCache {
+export function createActionsHistoryCache(
+    context: ActionsContext,
+    environment: StepEnvironment,
+    diagnostics: Diagnostics,
+): HistoryCache {
     const prefix = `ezshare-history-${context.userId}-run-${context.runId}-checkpoint-`;
     const http = new GitHubHttp(context.token, context.apiOrigin);
     const checkKey = (key: string): void => {
@@ -59,7 +64,52 @@ export function createActionsHistoryCache(context: ActionsContext, environment: 
                     ],
                     env,
                 },
-                { timeout: 310_000, failure: "github_unavailable", signal },
+                {
+                    timeout: 310_000,
+                    failure: "github_unavailable",
+                    signal,
+                    onFailure: ({ stdout, exitCode }) => {
+                        const schema = v.object({
+                            checkpointUpload: v.picklist(["invalid_args", "not_committed", "exception"]),
+                            name: v.optional(
+                                v.picklist([
+                                    "Error",
+                                    "TypeError",
+                                    "ValidationError",
+                                    "CacheWriteDeniedError",
+                                    "AbortError",
+                                    "other",
+                                ]),
+                            ),
+                            code: v.optional(
+                                v.picklist([
+                                    "ENOENT",
+                                    "EACCES",
+                                    "ERR_INVALID_URL",
+                                    "ERR_INVALID_ARG_TYPE",
+                                    "runtime_missing",
+                                    "other",
+                                ]),
+                            ),
+                        });
+                        for (const line of stdout.split("\n")) {
+                            try {
+                                const parsed = v.safeParse(schema, parseJson(line));
+                                if (parsed.success) {
+                                    diagnostics({
+                                        event: "history.cache_failed",
+                                        outcome: parsed.output.checkpointUpload,
+                                        name: parsed.output.name ?? "other",
+                                        code: parsed.output.code ?? "other",
+                                        exitCode,
+                                    });
+                                }
+                            } catch {
+                                /* SDK text is intentionally never echoed into public logs. */
+                            }
+                        }
+                    },
+                },
             );
         },
         remove: async (key, signal) => {

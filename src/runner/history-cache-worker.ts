@@ -25,6 +25,14 @@ try {
     console.log(
         JSON.stringify({
             checkpointUpload: "exception",
+            code:
+                error instanceof Error &&
+                "code" in error &&
+                v.is(v.picklist(["ENOENT", "EACCES", "ERR_INVALID_URL", "ERR_INVALID_ARG_TYPE"]), error.code)
+                    ? error.code
+                    : error instanceof Error && error.message.includes("ACTIONS_RUNTIME_TOKEN")
+                      ? "runtime_missing"
+                      : "other",
             name:
                 error instanceof Error &&
                 ["Error", "TypeError", "ValidationError", "CacheWriteDeniedError", "AbortError"].includes(error.name)
