@@ -7,6 +7,7 @@ import { restoreCache } from "@actions/cache";
 import { runAgentCommand } from "../src/runner/agent-process.ts";
 import { historyArchivePath } from "../src/runner/context.ts";
 import { createActionsHistoryCache } from "../src/runner/history-cache.ts";
+import { toAppError } from "../src/shared/errors.ts";
 
 if (process.argv[2] === "restore") {
     try {
@@ -17,8 +18,41 @@ if (process.argv[2] === "restore") {
         process.exitCode = 1;
     }
 } else {
-    await probe().catch(() => {
-        console.error(JSON.stringify({ event: "checkpoint.probe", stage: "failed" }));
+    await probe().catch((error) => {
+        let output = "";
+        if (error instanceof Error && error.cause !== null && typeof error.cause === "object") {
+            for (const name of ["stdout", "stderr"]) {
+                if (typeof error.cause[name] === "string") {
+                    output += error.cause[name];
+                }
+            }
+        }
+        const signals = [
+            "ERR_MODULE_NOT_FOUND",
+            "ERR_PACKAGE_PATH_NOT_EXPORTED",
+            "EACCES",
+            "ENOENT",
+            "ACTIONS_RUNTIME_TOKEN",
+            "ACTIONS_RESULTS_URL",
+            "read-only",
+            "Cache reservation failed",
+            "Unable to reserve",
+            "401",
+            "403",
+            "404",
+            "tar failed",
+            "TypeError",
+        ].filter((code) => output.includes(code));
+        console.error(
+            JSON.stringify({
+                event: "checkpoint.probe",
+                stage: "failed",
+                code: toAppError(error).code,
+                signals,
+                runtime: Boolean(process.env.ACTIONS_RUNTIME_TOKEN),
+                endpoint: Boolean(process.env.ACTIONS_RESULTS_URL),
+            }),
+        );
         process.exitCode = 1;
     });
 }
@@ -81,7 +115,14 @@ async function probe() {
         }
         console.log(JSON.stringify({ event: "checkpoint.probe", stage: "restored" }));
     } finally {
-        await cache.remove(key, AbortSignal.timeout(30_000));
-        console.log(JSON.stringify({ event: "checkpoint.probe", stage: "removed" }));
+        try {
+            await cache.remove(key, AbortSignal.timeout(30_000));
+            console.log(JSON.stringify({ event: "checkpoint.probe", stage: "removed" }));
+        } catch (error) {
+            console.error(
+                JSON.stringify({ event: "checkpoint.probe", stage: "cleanup_failed", code: toAppError(error).code }),
+            );
+            process.exitCode = 1;
+        }
     }
 }
