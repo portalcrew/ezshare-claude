@@ -13,8 +13,9 @@ Share Claude Code accounts with your team while every member keeps a private ses
 A member opens the launcher, connects with a fine-grained GitHub token and starts a session. GitHub Actions
 starts a fresh runner for that member. Claude Code uses the account the member selected, and the session opens
 through Morty or VS Code. Sessions last up to four hours and end early after 15 minutes without a new Claude
-turn, which frees the runner. Normal session shutdown, including an idle stop, encrypts the member's Claude
-conversation and workspace for the next session, under a key kept only in that browser. An unreadable archive
+turn, which frees the runner. The runner encrypts and uploads the member's Claude conversation and workspace
+after startup, after each five-minute interval, and during normal shutdown, including an idle stop. The key is
+kept only in that browser. An unreadable archive
 is not overwritten unless the member chooses to replace it; clearing browser data loses its key. An account
 owner adds or reauthorizes shared Claude accounts from the same launcher.
 
@@ -23,6 +24,36 @@ clears only its dedicated Morty directory and retries once with a new identity, 
 and workspace. The previous Computer's links no longer work. Other authorization or pairing failures are not
 treated as permission to replace an identity. Actions logs record the allowlisted recovery reason and stage;
 local acceptance tests cover history continuation and the single-recovery limit.
+
+## Automatic history saves
+
+A ready Morty or VS Code session uploads encrypted snapshots independently of launcher polling. Saves are serial:
+a failed upload leaves the last completed remote snapshot available and the next interval retries. Only the
+latest two snapshots from the current run are retained; a previous snapshot is removed only after its successor
+uploads successfully. The normal final cache entry remains compatible with older launchers and workflows.
+
+On normal shutdown, the runner cancels and joins any active snapshot, stops the agent, encrypts its final state
+and waits for that upload before reporting that history is saved. The workflow's final cache action is a fallback
+if the controller upload fails. A force-cancelled or lost runner can recover only up to its last successful
+upload; changes after that snapshot may be lost. GitHub cache retention and availability still apply. Running
+files can change during a snapshot, so this is best-effort recovery, not a filesystem transaction.
+
+The archive encryption, repository/member binding and browser history key are unchanged. A browser that cannot
+open the restored archive does not create checkpoints or replace it unless the member explicitly chooses to.
+Existing runners do not gain this behavior until the member starts a new session.
+
+| State or file | Writer | Reader |
+| --- | --- | --- |
+| Runner `ezshare-history/history.bin.partial` | Trusted controller streaming the agent's tar output through AES-GCM | Controller only; removed on failure or cancellation |
+| Runner `ezshare-history/history.bin` | Controller replaces it atomically after encryption completes | Bounded cache upload worker; final workflow cache action |
+| GitHub cache `ezshare-history-<user-id>-run-<run-id>-checkpoint-<uuid>` | Trusted controller through the Actions cache runtime | Next run's cache restore; contents open only with that member's browser key |
+| `ACTIONS_RUNTIME_TOKEN` and cache service endpoints | GitHub's JavaScript action runtime | Trusted controller and bounded cache worker; never the unprivileged agent |
+| Public `history.checkpoint` diagnostic | Controller after a save, failure, or cleanup failure | Run logs; only sequence, outcome and allowlisted error code |
+
+Snapshot scheduling, upload failures, retention and crash recovery are covered by controlled-clock application
+scenarios with real archive encryption and a stateful Actions simulator. The manual **History checkpoint cache
+probe** uses synthetic bytes and an isolated cache version to check the real upload/restore/delete transport;
+it does not read shared Claude credentials or personal history.
 
 ## How it stays private
 
