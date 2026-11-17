@@ -48,12 +48,13 @@ Existing runners do not gain this behavior until the member starts a new session
 | Runner `ezshare-history/history.bin` | Controller replaces it atomically after encryption completes | Bounded cache upload worker; final workflow cache action |
 | GitHub cache `ezshare-history-<user-id>-run-<run-id>-checkpoint-<uuid>` | Trusted controller through the Actions cache runtime | Next run's cache restore; contents open only with that member's browser key |
 | `ACTIONS_RUNTIME_TOKEN` and cache service endpoints | GitHub's JavaScript action runtime | Trusted controller and bounded cache worker; never the unprivileged agent |
-| Public `history.checkpoint` diagnostic | Controller after a save, failure, or cleanup failure | Run logs; only sequence, outcome and allowlisted error code |
+| Public `history.checkpoint` and `history.cache_failed` diagnostics | Controller after a save, failure, or cleanup failure | Run logs; only sequence, outcome, exit status and allowlisted error codes |
 
 Snapshot scheduling, upload failures, retention and crash recovery are covered by controlled-clock application
 scenarios with real archive encryption and a stateful Actions simulator. The manual **History checkpoint cache
 probe** uses synthetic bytes and an isolated cache version to check the real upload/restore/delete transport;
-it does not read shared Claude credentials or personal history.
+it does not read shared Claude credentials or personal history. The real upload, byte-for-byte restore and
+scoped cleanup passed in [Actions run 44113915786](https://github.com/portalcrew/ezshare-claude/actions/runs/44113915786).
 
 ## How it stays private
 
