@@ -9,6 +9,9 @@ overrides:
 
 packageExtensionsChecksum: sha256-A6LwFSh/yhHYALTgYOl4ziesnQJ2yeAJ4QK9Pv6bRH8=
 
+patchedDependencies:
+  '@actions/glob@0.7.0': a9e27c13bee6631b0d3b5a78e2f0f0f3f9643c4c232fa7b9b6ed70c210782577
+
 importers:
 
   .:
@@ -1790,7 +1793,7 @@ snapshots:
     dependencies:
       '@actions/core': 3.0.1
       '@actions/exec': 3.0.0
-      '@actions/glob': 0.7.0
+      '@actions/glob': 0.7.0(patch_hash=a9e27c13bee6631b0d3b5a78e2f0f0f3f9643c4c232fa7b9b6ed70c210782577)
       '@actions/http-client': 4.0.1
       '@actions/io': 3.0.2
       '@azure/core-rest-pipeline': 1.23.0(supports-color@7.2.0)
@@ -1810,7 +1813,7 @@ snapshots:
     dependencies:
       '@actions/io': 3.0.2
 
-  '@actions/glob@0.7.0':
+  '@actions/glob@0.7.0(patch_hash=a9e27c13bee6631b0d3b5a78e2f0f0f3f9643c4c232fa7b9b6ed70c210782577)':
     dependencies:
       '@actions/core': 3.0.1
       minimatch: 11.0.1
