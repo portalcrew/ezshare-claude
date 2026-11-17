@@ -28,7 +28,7 @@ test("Given a member chooses VS Code, When authorization is needed, Then she see
     expect(app.github.runs[0]?.conclusion).toBe("success");
 });
 
-test("Given a member authorizes VS Code, When she reloads, restarts VS Code and later chooses Morty, Then the private entry, login, workspace and Claude conversation continue", async () => {
+test("Given a member authorizes VS Code, When she restarts VS Code and later chooses Morty, Then the private entry, login, workspace and Claude conversation continue", async () => {
     app = await createTestApp();
     const body = document.body;
     await connect(app, tokens.alice);
@@ -38,8 +38,7 @@ test("Given a member authorizes VS Code, When she reloads, restarts VS Code and 
     );
     await app.user.click(getByRole(body, "button", { name: "Start a session" }));
     await app.eventually(() => getByText(body, "ABCD-EFGH"));
-    app.reload();
-    await app.eventually(() => getByText(body, "ABCD-EFGH"));
+
     const run = app.github.runs[0];
     if (run === undefined) {
         throw new Error("Expected the first VS Code run");
@@ -48,7 +47,8 @@ test("Given a member authorizes VS Code, When she reloads, restarts VS Code and 
     const first = (await app.eventually(() => getByRole(body, "link", { name: /Open VS Code/u }))).getAttribute("href");
     expect(new URL(first ?? "").origin).toBe("https://vscode.dev");
     await app.actions.editVscodeWorkspace(run.id);
-    app.reload();
+    await app.user.click(getByRole(body, "button", { name: "Manage shared accounts" }));
+    await app.user.click(getByRole(body, "button", { name: "Use a shared account" }));
     expect((await app.eventually(() => getByRole(body, "link", { name: /Open VS Code/u }))).getAttribute("href")).toBe(
         first,
     );
@@ -199,7 +199,8 @@ test("Given a ready VS Code session, When a member chooses the desktop entry, Th
             "workbench.browser.dataStorage": "workspace",
         },
     });
-    app.reload();
+    await app.user.click(getByRole(body, "button", { name: "Manage shared accounts" }));
+    await app.user.click(getByRole(body, "button", { name: "Use a shared account" }));
     expect(
         (await app.eventually(() => getByRole(body, "link", { name: /Open in desktop VS Code/u }))).getAttribute(
             "href",

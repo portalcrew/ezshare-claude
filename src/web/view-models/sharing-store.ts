@@ -15,13 +15,13 @@ import {
     vscodeUrl,
 } from "../../shared/protocol.ts";
 import { sealForGitHub } from "../services/secret-box.ts";
-import type { PendingSession } from "../services/vault.ts";
 import { type AccountCatalog, readAccounts } from "./account-catalog.ts";
 import {
-    abandonSession,
     beginSession,
+    closeMailbox,
     type MemberContext,
     observeSession,
+    type SessionRequest,
     sessionExpired,
 } from "./session-protocol.ts";
 import { StoreWorkflow } from "./store-workflow.ts";
@@ -43,11 +43,11 @@ export type SharingPhase =
     | { readonly kind: "loading" }
     | { readonly kind: "intro"; readonly outcome: SharingOutcome | null }
     | { readonly kind: "starting" }
-    | { readonly kind: "waiting"; readonly session: PendingSession }
-    | { readonly kind: "connecting_vscode"; readonly session: PendingSession; readonly code: string }
-    | { readonly kind: "authorizing"; readonly session: PendingSession; readonly entry: AuthorizationEntry }
-    | { readonly kind: "completing"; readonly session: PendingSession }
-    | { readonly kind: "publishing"; readonly session: PendingSession };
+    | { readonly kind: "waiting"; readonly session: SessionRequest }
+    | { readonly kind: "connecting_vscode"; readonly session: SessionRequest; readonly code: string }
+    | { readonly kind: "authorizing"; readonly session: SessionRequest; readonly entry: AuthorizationEntry }
+    | { readonly kind: "completing"; readonly session: SessionRequest }
+    | { readonly kind: "publishing"; readonly session: SessionRequest };
 
 export type AccountEditor =
     | { readonly kind: "closed" }
@@ -60,7 +60,6 @@ export type SharingCommand = "start" | "submit_code" | "cancel" | "remove" | nul
 export interface SharingState {
     readonly accounts: AccountCatalog;
     readonly editor: AccountEditor;
-    readonly account: string;
     readonly phase: SharingPhase;
     readonly command: SharingCommand;
     readonly problem: ErrorCode | null;
@@ -94,24 +93,28 @@ export function createSharingStore(member: MemberContext) {
     // GitHub keeps a finished authorization run visible while its cleanup completes. Its successor queues behind it.
     let ending: string | null = null;
     return createStore<SharingState & SharingActions>()((set, get) => {
-        const publish = async (session: PendingSession, token: string, signal: AbortSignal): Promise<void> => {
+        const publish = async (session: SessionRequest, token: string, signal: AbortSignal): Promise<void> => {
             const key = await member.github.secretPublicKey(member.repository.name, signal);
             const sealed = await sealForGitHub(key.key, token, signal);
-            const id = await member.vault.loadSessionAccount(session, signal);
-            await member.github.putSecret(member.repository.name, accountSecret(id), key.keyId, sealed, signal);
-            await abandonSession(member, session);
+            await member.github.putSecret(
+                member.repository.name,
+                accountSecret(session.account),
+                key.keyId,
+                sealed,
+                signal,
+            );
+            await closeMailbox(member, session);
         };
 
-        const observe = async (session: PendingSession, signal: AbortSignal): Promise<SharingPhase> => {
-            set({ account: await member.vault.loadSessionAccount(session, signal) });
+        const observe = async (session: SessionRequest, signal: AbortSignal): Promise<SharingPhase> => {
             if (sessionExpired(member, session)) {
-                await abandonSession(member, session);
+                await closeMailbox(member, session);
                 return { kind: "intro", outcome: { kind: "failed", code: "expired" } };
             }
             const observation = await observeSession(member, session, schemas, signal);
             if (observation.kind === "not_started" || observation.kind === "queued") {
                 if (observation.kind === "not_started" && observation.overdue) {
-                    await abandonSession(member, session);
+                    await closeMailbox(member, session);
                     return { kind: "intro", outcome: { kind: "failed", code: "github_unavailable" } };
                 }
                 return { kind: "waiting", session };
@@ -127,7 +130,7 @@ export function createSharingStore(member: MemberContext) {
             }
             const failure = messages.find((message) => message.kind === "failed");
             if (failure !== undefined || observation.kind === "finished") {
-                await abandonSession(member, session);
+                await closeMailbox(member, session);
                 return {
                     kind: "intro",
                     outcome: { kind: "failed", code: failure === undefined ? "provider_failed" : failure.body.code },
@@ -167,16 +170,9 @@ export function createSharingStore(member: MemberContext) {
             const phase = get().phase;
             let next: SharingPhase;
             switch (phase.kind) {
-                case "loading": {
-                    const saved = await member.vault.loadPending(
-                        "login",
-                        member.repository.name,
-                        member.user.id,
-                        signal,
-                    );
-                    next = saved === null ? { kind: "intro", outcome: null } : await observe(saved, signal);
+                case "loading":
+                    next = { kind: "intro", outcome: null };
                     break;
-                }
                 case "intro":
                     set({ accounts: await readAccounts(member, signal) });
                     return;
@@ -211,7 +207,6 @@ export function createSharingStore(member: MemberContext) {
         return {
             accounts: { kind: "loading" },
             editor: { kind: "closed" },
-            account: "legacy",
             refresh: workflow.refresh,
             addAccount: () => {
                 if (get().phase.kind === "intro" && get().command === null) {
@@ -293,7 +288,7 @@ export function createSharingStore(member: MemberContext) {
                     ) {
                         throw new AppError("session_busy");
                     }
-                    set({ phase: { kind: "starting" }, editor: { kind: "closed" }, account });
+                    set({ phase: { kind: "starting" }, editor: { kind: "closed" } });
                     try {
                         set({
                             phase: {
@@ -342,7 +337,7 @@ export function createSharingStore(member: MemberContext) {
                     if (observation.kind === "queued" || observation.kind === "running") {
                         await member.github.cancelRun(member.repository.name, observation.run.id, signal);
                     }
-                    await abandonSession(member, phase.session);
+                    await closeMailbox(member, phase.session);
                     set({ phase: { kind: "intro", outcome: { kind: "cancelled" } } });
                 }),
         };

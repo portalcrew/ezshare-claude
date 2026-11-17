@@ -34,7 +34,7 @@ export const requestIdSchema = v.pipe(v.string(), v.uuid());
 export const userIdSchema = v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,15}$/u));
 export const runIdSchema = v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,18}$/u));
 /** An X25519 public key: 32 bytes as canonical unpadded base64url. */
-export const channelKeySchema = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/u));
+const channelKeySchema = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/u));
 /** A member's history key: 32 random bytes as canonical unpadded base64url. Only the member's browser keeps it. */
 export const historyKeySchema = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/u));
 

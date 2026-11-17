@@ -238,7 +238,7 @@ export const chatCopy = {
     waiting: {
         beforeElapsed: "Waiting ",
         afterElapsed:
-            ". The first start usually takes two to four minutes. Keep this launcher open until ready so it can unlock your personal state. You can close it after that.",
+            ". The first start usually takes two to four minutes. Keep this launcher open so it can unlock your personal state and let you save and end the session.",
     },
     readyTitle: "Ready",
     access: "Open with",
@@ -263,7 +263,8 @@ export const chatCopy = {
     vscodeOpen: "Open VS Code in browser",
     vscodeDesktopOpen: "Open in desktop VS Code",
     open: "Open chat",
-    readyHint: "This link gives access to your session. Keep it private.",
+    readyHint:
+        "This link gives access to your session. Keep it private. Keep this page open to save and end the session.",
     end: "Save and end session",
     endWithoutSave: "End session",
     saving: "Saving and ending your session…",

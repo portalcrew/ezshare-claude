@@ -55,7 +55,7 @@ test("Given an owner with no shared account, When she adds two accounts, refresh
     expect(app.github.runs.at(-1)?.inputs["account"]).not.toBe("legacy");
 });
 
-test("Given multiple accounts including the original account, When a member chooses one and reloads an active session, Then the selected credential and account label are preserved", async () => {
+test("Given multiple accounts including the original account, When a member chooses one and switches launcher tabs, Then the selected credential and account label are preserved", async () => {
     app = await createTestApp({ sharedToken: "sk-ant-oat01-REVOKED" });
     const id = newAccountId("Engineering");
     app.github.setSecret(accountSecret(id), "sk-ant-oat01-valid-second-account");
@@ -71,7 +71,8 @@ test("Given multiple accounts including the original account, When a member choo
     await app.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
     expect(app.github.runs[0]?.inputs["account"]).toBe(id);
     expect(body.textContent).toContain("Account: Engineering");
-    app.reload();
+    await app.user.click(getByRole(body, "button", { name: "Manage shared accounts" }));
+    await app.user.click(getByRole(body, "button", { name: "Use a shared account" }));
     await app.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
     expect(body.textContent).toContain("Account: Engineering");
 });
@@ -105,7 +106,7 @@ test("Given shared accounts exist, When metadata cannot be reached and then reco
     await app.eventually(() => getByRole(body, "combobox", { name: "Claude account" }));
 });
 
-test("Given two named accounts, When one is reauthorized after a reload, Then only that credential is replaced", async () => {
+test("Given two named accounts, When one is reauthorized, Then only that credential is replaced", async () => {
     app = await createTestApp({ sharedToken: null });
     const first = newAccountId("Team A");
     const second = newAccountId("Team B");
@@ -118,8 +119,6 @@ test("Given two named accounts, When one is reauthorized after a reload, Then on
     await app.user.click(within(row).getByRole("button", { name: "Reauthorize" }));
     await app.user.click(getByRole(body, "button", { name: "I understand, start authorization" }));
     await app.eventually(() => getByLabelText(body, "Authorization code"));
-    app.reload();
-    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Manage shared accounts" })));
     await app.user.type(
         await app.eventually(() => getByLabelText(body, "Authorization code")),
         "reauthorize-code-1234567890",
