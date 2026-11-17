@@ -18,6 +18,12 @@ conversation and workspace for the next session, under a key kept only in that b
 is not overwritten unless the member chooses to replace it; clearing browser data loses its key. An account
 owner adds or reauthorizes shared Claude accounts from the same launcher.
 
+Morty normally reuses the archived Computer identity. If setup reports exactly `computer_revoked`, the runner
+clears only its dedicated Morty directory and retries once with a new identity, retaining the Claude session
+and workspace. The previous Computer's links no longer work. Other authorization or pairing failures are not
+treated as permission to replace an identity. Actions logs record the allowlisted recovery reason and stage;
+local acceptance tests cover history continuation and the single-recovery limit.
+
 ## How it stays private
 
 - The browser and the session run talk through an Issue in this repository, but every message is encrypted and
