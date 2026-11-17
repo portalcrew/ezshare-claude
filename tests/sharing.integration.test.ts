@@ -161,8 +161,6 @@ test("Given no shared Claude credential, When the owner chooses runner authoriza
         throw new Error("Expected the temporary authorization runner");
     }
     expect(run.inputs["login_access"]).toBe("vscode");
-    app.reload();
-    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Manage shared accounts" })));
     await app.eventually(() => expect(body.textContent).toContain("ABCD-EFGH"));
     await app.actions.authorizeVscode(run.id);
     const desktop = await app.eventually(() => getByRole(body, "link", { name: /Open authorization workspace/u }));
@@ -174,8 +172,6 @@ test("Given no shared Claude credential, When the owner chooses runner authoriza
     expect(authorization.readOnly).toBe(true);
     expect(new URL(authorization.value).origin).toBe("https://claude.ai");
     expect(getByRole(body, "button", { name: "Copy authorization link" })).toBeTruthy();
-    app.reload();
-    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Manage shared accounts" })));
     await app.eventually(() => getByRole(body, "link", { name: /Open authorization workspace/u }));
     await app.user.type(getByLabelText(body, "Authorization code"), "runner-code-1234567890");
     await app.user.click(getByRole(body, "button", { name: "Submit code" }));

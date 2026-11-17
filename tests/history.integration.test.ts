@@ -174,7 +174,7 @@ test("Given an older archive without Morty identity, When the member continues t
     expect(continued.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
 });
 
-test("Given the launcher closes before unlocking history, When the key deadline expires, Then no new Computer is created and reopening explains how to retry", async () => {
+test("Given the launcher closes before unlocking history, When the key deadline expires, Then no new Computer or archive is created", async () => {
     app = await createTestApp();
     const body = document.body;
     app.actions.holdQueue();
@@ -199,9 +199,6 @@ test("Given the launcher closes before unlocking history, When the key deadline 
     await app.eventually(() => expect(job.error).toBe("history_key_missing"));
     expect(app.actions.cache.size).toBe(0);
     expect((await app.actions.agentLog(job.run.id)).some((entry) => entry.command === "setup")).toBe(false);
-    app.reload();
-    const alert = await app.eventually(() => getByRole(body, "alert"));
-    expect(alert.textContent).toContain("Keep this launcher open");
 });
 
 test("Given saved conversation and Morty identity, When the member chooses a new Morty identity and starts, Then only Morty state is replaced and the next session keeps the new identity", async () => {
@@ -221,7 +218,6 @@ test("Given saved conversation and Morty identity, When the member chooses a new
         }
         return run;
     });
-    app.reload();
     app.actions.release();
     const link = await app.eventually(() => getByRole(document.body, "link", { name: /Open chat/u }));
     const second = { url: new URL(link.getAttribute("href") ?? ""), runId: dispatched.id };

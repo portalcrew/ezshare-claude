@@ -35,7 +35,6 @@ export function ChatView({
 }) {
     const accounts = useStore(store, (state) => state.accounts);
     const selectedAccount = useStore(store, (state) => state.selectedAccount);
-    const runningAccount = useStore(store, (state) => state.runningAccount);
     const phase = useStore(store, (state) => state.phase);
     const command = useStore(store, (state) => state.command);
     const problem = useStore(store, (state) => state.problem);
@@ -57,7 +56,7 @@ export function ChatView({
             )}
             {commandError !== null && <Notice tone="error">{errorMessage(commandError)}</Notice>}
             {"session" in phase && (
-                <p className="text-sm font-medium">{accountsCopy.using(sessionAccountLabel(runningAccount))}</p>
+                <p className="text-sm font-medium">{accountsCopy.using(sessionAccountLabel(phase.session.account))}</p>
             )}
             {(() => {
                 switch (phase.kind) {

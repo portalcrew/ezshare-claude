@@ -1,6 +1,6 @@
 import * as v from "valibot";
 import { createStore } from "zustand/vanilla";
-import { accountName, LEGACY_ACCOUNT } from "../../shared/accounts.ts";
+import { accountName } from "../../shared/accounts.ts";
 import type { SessionChannel } from "../../shared/channel.ts";
 import { AppError, type ErrorCode } from "../../shared/errors.ts";
 import type { WorkflowRun } from "../../shared/github/client.ts";
@@ -15,14 +15,15 @@ import {
     vscodeDesktopUrl,
     vscodeUrl,
 } from "../../shared/protocol.ts";
-import { type PendingSession, type SessionClient, sessionClientSchema } from "../services/vault.ts";
+import { type SessionClient, sessionClientSchema } from "../services/vault.ts";
 import { type AccountCatalog, readAccounts } from "./account-catalog.ts";
 import {
-    abandonSession,
     beginSession,
+    closeMailbox,
     type MemberContext,
     observeSession,
     requireRun,
+    type SessionRequest,
     sessionExpired,
 } from "./session-protocol.ts";
 import { StoreWorkflow } from "./store-workflow.ts";
@@ -51,15 +52,15 @@ export type ChatPhase =
     | { readonly kind: "idle"; readonly outcome: ChatOutcome | null }
     | { readonly kind: "busy"; readonly runs: readonly WorkflowRun[] }
     | { readonly kind: "starting" }
-    | { readonly kind: "queued"; readonly session: PendingSession }
-    | { readonly kind: "preparing"; readonly session: PendingSession }
-    | { readonly kind: "authorizing"; readonly session: PendingSession; readonly code: string }
+    | { readonly kind: "queued"; readonly session: SessionRequest }
+    | { readonly kind: "preparing"; readonly session: SessionRequest }
+    | { readonly kind: "authorizing"; readonly session: SessionRequest; readonly code: string }
     | ({
           readonly kind: "ready";
-          readonly session: PendingSession;
+          readonly session: SessionRequest;
           readonly history: HistoryStart;
       } & ReadyEntry)
-    | { readonly kind: "stopping"; readonly session: PendingSession; readonly mode: "save" | "end" | "force" };
+    | { readonly kind: "stopping"; readonly session: SessionRequest; readonly mode: "save" | "end" | "force" };
 
 /** User commands in flight; the view disables the matching controls. */
 export type ChatCommand = "start" | "stop" | "force_stop" | "cancel_run" | "replace_history" | "choose_client" | null;
@@ -67,7 +68,6 @@ export type ChatCommand = "start" | "stop" | "force_stop" | "cancel_run" | "repl
 export interface ChatState {
     readonly accounts: AccountCatalog;
     readonly selectedAccount: string | null;
-    readonly runningAccount: string;
     readonly phase: ChatPhase;
     readonly command: ChatCommand;
     /** The last refresh failed; the phase is the last confirmed one. */
@@ -106,15 +106,15 @@ export function createChatStore(member: MemberContext) {
     const keyed = new Set<string>();
 
     return createStore<ChatState & ChatActions>()((set, get) => {
-        /** The session is over for this page: forget its key and show how it ended. */
-        const finish = async (session: PendingSession, outcome: ChatOutcome): Promise<ChatPhase> => {
-            await abandonSession(member, session);
+        /** Release the page's request and show how its task ended. */
+        const finish = async (session: SessionRequest, outcome: ChatOutcome): Promise<ChatPhase> => {
+            await closeMailbox(member, session);
             return { kind: "idle", outcome };
         };
 
         /** The runner reported its end: keep a saved history for the next session, then finish. */
         const finishReported = async (
-            session: PendingSession,
+            session: SessionRequest,
             outcome: ChatOutcome,
             stillRunning: string | null,
             signal: AbortSignal,
@@ -129,7 +129,7 @@ export function createChatStore(member: MemberContext) {
 
         /** Sends this browser's history key to a running session once, until it reports ready. */
         const handOverHistoryKey = async (
-            session: PendingSession,
+            session: SessionRequest,
             channel: ChatChannel,
             messages: readonly ChatRunnerMessage[],
             signal: AbortSignal,
@@ -151,7 +151,7 @@ export function createChatStore(member: MemberContext) {
          * acts on what it finds: it carries out a cancel requested before the run was visible, hands over the
          * history key, and finishes a session that ended.
          */
-        const advance = async (session: PendingSession, signal: AbortSignal): Promise<ChatPhase> => {
+        const advance = async (session: SessionRequest, signal: AbortSignal): Promise<ChatPhase> => {
             if (sessionExpired(member, session)) {
                 return finish(session, { kind: "expired" });
             }
@@ -191,16 +191,9 @@ export function createChatStore(member: MemberContext) {
             const phase = get().phase;
             let next: ChatPhase;
             switch (phase.kind) {
-                case "loading": {
-                    const saved = await member.vault.loadPending(
-                        "chat",
-                        member.repository.name,
-                        member.user.id,
-                        signal,
-                    );
-                    next = saved === null ? await idleOrBusy(null, signal) : await advance(saved, signal);
+                case "loading":
+                    next = await idleOrBusy(null, signal);
                     break;
-                }
                 case "idle":
                 case "busy":
                     next = await idleOrBusy(phase.kind === "idle" ? phase.outcome : null, signal);
@@ -238,9 +231,6 @@ export function createChatStore(member: MemberContext) {
                             : selected,
                 });
             }
-            if ("session" in next) {
-                set({ runningAccount: await member.vault.loadSessionAccount(next.session, signal) });
-            }
             const history = await member.vault.history(member.repository.name, member.user.id, signal);
             const client = await member.vault.loadSessionClient(member.repository.name, member.user.id, signal);
             set({ phase: next, problem: null, replacingHistory: history.mode === "replace", client });
@@ -270,7 +260,6 @@ export function createChatStore(member: MemberContext) {
         return {
             accounts: { kind: "loading" },
             selectedAccount: null,
-            runningAccount: LEGACY_ACCOUNT,
             selectAccount: (id) => {
                 const state = get();
                 if (
@@ -349,7 +338,7 @@ export function createChatStore(member: MemberContext) {
                             access,
                             account,
                         });
-                        set({ phase: { kind: "queued", session }, newMortyIdentity: false, runningAccount: account });
+                        set({ phase: { kind: "queued", session }, newMortyIdentity: false });
                     } catch (cause) {
                         set({ phase });
                         throw cause;
@@ -422,7 +411,7 @@ export function createChatStore(member: MemberContext) {
 }
 
 /** A running session is ready once the runner sent its chat link; until then it is preparing. */
-function progressOf(session: PendingSession, messages: readonly ChatRunnerMessage[]): ChatPhase {
+function progressOf(session: SessionRequest, messages: readonly ChatRunnerMessage[]): ChatPhase {
     const ready = messages.findLast((message) => message.kind === "ready" || message.kind === "vscode_ready");
     if (ready !== undefined) {
         const entry: ReadyEntry =

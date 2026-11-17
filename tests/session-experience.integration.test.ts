@@ -9,7 +9,7 @@ afterEach(async () => {
     app = undefined;
 });
 
-test("Given a preferred desktop client, When a member starts, reloads and switches to the browser, Then one primary entry follows her choice without another runner and saving is explicit", async () => {
+test("Given a preferred desktop client, When a member starts and switches to the browser, Then one primary entry follows her choice without another runner and saving is explicit", async () => {
     app = await createTestApp({ isPrivate: false });
     const body = document.body;
     await connect(app, tokens.alice);
@@ -43,7 +43,8 @@ test("Given a preferred desktop client, When a member starts, reloads and switch
     await app.eventually(() => getByRole(body, "link", { name: /Open VS Code in browser/u }));
     expect(queryByRole(body, "link", { name: /Open in desktop VS Code/u })).toBeNull();
     expect(app.github.runs).toHaveLength(1);
-    app.reload();
+    await app.user.click(getByRole(body, "button", { name: "Manage shared accounts" }));
+    await app.user.click(getByRole(body, "button", { name: "Use a shared account" }));
     await app.eventually(() => getByRole(body, "link", { name: /Open VS Code in browser/u }));
     expect(queryByRole(body, "link", { name: /Open in desktop VS Code/u })).toBeNull();
     await app.user.click(getByRole(body, "button", { name: "Save and end session" }));

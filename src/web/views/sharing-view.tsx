@@ -27,7 +27,6 @@ export function SharingView({
 }) {
     const editor = useStore(store, (state) => state.editor);
     const accounts = useStore(store, (state) => state.accounts);
-    const account = useStore(store, (state) => state.account);
     const phase = useStore(store, (state) => state.phase);
     const command = useStore(store, (state) => state.command);
     const problem = useStore(store, (state) => state.problem);
@@ -44,7 +43,9 @@ export function SharingView({
                 </Notice>
             )}
             {commandError !== null && <Notice tone="error">{errorMessage(commandError)}</Notice>}
-            {inProgress && <p className="text-sm font-medium">{accountsCopy.using(sessionAccountLabel(account))}</p>}
+            {"session" in phase && (
+                <p className="text-sm font-medium">{accountsCopy.using(sessionAccountLabel(phase.session.account))}</p>
+            )}
             {inProgress && (
                 <ProgressSteps
                     label={sharingCopy.progress}

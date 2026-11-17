@@ -1,17 +1,12 @@
 import * as v from "valibot";
-import { accountIdSchema, LEGACY_ACCOUNT } from "../../shared/accounts.ts";
 import { withDeadline } from "../../shared/async.ts";
 import { decodeBase64Url, encodeBase64Url } from "../../shared/base64url.ts";
-import type { ChannelKey } from "../../shared/channel-crypto.ts";
 import { AppError } from "../../shared/errors.ts";
 import {
-    channelKeySchema,
     type HistoryMode,
     historyKeySchema,
     historyModeSchema,
-    type Purpose,
     parseJson,
-    requestIdSchema,
     userIdSchema,
 } from "../../shared/protocol.ts";
 
@@ -34,29 +29,6 @@ const connectionSchema = v.strictObject({
 });
 type SavedConnection = Readonly<v.InferOutput<typeof connectionSchema>>;
 
-/** A session this browser started and may still need to observe, stop or finish. */
-export interface PendingSession {
-    readonly purpose: Purpose;
-    readonly repository: string;
-    readonly userId: string;
-    readonly requestId: string;
-    readonly issue: number;
-    readonly startedAt: number;
-    readonly key: ChannelKey;
-}
-
-const pendingSchema = v.strictObject({
-    version: v.picklist([1, 2]),
-    purpose: v.picklist(["chat", "login"]),
-    repository: v.pipe(v.string(), v.maxLength(140)),
-    userId: userIdSchema,
-    requestId: requestIdSchema,
-    issue: v.pipe(v.number(), v.safeInteger(), v.minValue(1)),
-    startedAt: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
-    publicKey: channelKeySchema,
-    privateKey: v.instance(CryptoKey),
-});
-
 /**
  * The member's history key for one repository, and whether the next session continues the saved history or
  * replaces it. The key leaves the browser only inside the encrypted session channel; losing it loses the history.
@@ -73,9 +45,6 @@ export type SessionClient = v.InferOutput<typeof sessionClientSchema>;
 const clientPreferenceSchema = v.strictObject({ version: v.literal(1), client: sessionClientSchema });
 
 export interface Vault {
-    readonly saveSessionAccount: (session: PendingSession, account: string, signal: AbortSignal) => Promise<void>;
-    readonly loadSessionAccount: (session: PendingSession, signal: AbortSignal) => Promise<string>;
-
     readonly loadSessionClient: (repository: string, userId: string, signal: AbortSignal) => Promise<SessionClient>;
     readonly saveSessionClient: (
         repository: string,
@@ -86,19 +55,6 @@ export interface Vault {
     readonly saveConnection: (connection: SavedConnection, signal: AbortSignal) => Promise<void>;
     readonly loadConnection: (signal: AbortSignal) => Promise<SavedConnection | null>;
     readonly forgetConnection: (signal: AbortSignal) => Promise<void>;
-    readonly savePending: (session: PendingSession, signal: AbortSignal) => Promise<void>;
-    readonly loadPending: (
-        purpose: Purpose,
-        repository: string,
-        userId: string,
-        signal: AbortSignal,
-    ) => Promise<PendingSession | null>;
-    readonly forgetPending: (
-        purpose: Purpose,
-        repository: string,
-        userId: string,
-        signal: AbortSignal,
-    ) => Promise<void>;
     /** Loads the member's history settings, creating a key on first use. */
     readonly history: (repository: string, userId: string, signal: AbortSignal) => Promise<HistorySettings>;
     readonly setHistoryMode: (
@@ -108,12 +64,6 @@ export interface Vault {
         signal: AbortSignal,
     ) => Promise<void>;
 }
-
-const pendingSlot = (purpose: Purpose, repository: string, userId: string) =>
-    `pending:${purpose}:${repository}:${userId}`;
-
-const accountSlot = (session: Pick<PendingSession, "repository" | "userId" | "requestId">) =>
-    `account:${session.repository}:${session.userId}:${session.requestId}`;
 
 const historySlot = (repository: string, userId: string) => `history:${repository}:${userId}`;
 
@@ -131,20 +81,7 @@ export function createBrowserVault(apiOrigin: string): Vault {
     const saveHistory = (repository: string, userId: string, settings: HistorySettings, signal: AbortSignal) =>
         putSealed(historySlot(repository, userId), { version: 1, ...settings }, signal);
     const clientSlot = (repository: string, userId: string) => `client:${repository}:${userId}`;
-    const readSessionAccount = async (session: PendingSession, signal: AbortSignal): Promise<string> => {
-        const raw = await get(accountSlot(session), signal);
-        if (raw === undefined) {
-            return LEGACY_ACCOUNT;
-        }
-        const record = v.safeParse(v.strictObject({ version: v.literal(1), account: accountIdSchema }), raw);
-        if (!record.success) {
-            throw new AppError("storage_unavailable");
-        }
-        return record.output.account;
-    };
     return {
-        saveSessionAccount: (session, account, signal) => put(accountSlot(session), { version: 1, account }, signal),
-        loadSessionAccount: readSessionAccount,
         loadSessionClient: async (repository, userId, signal) => {
             const record = v.safeParse(clientPreferenceSchema, await get(clientSlot(repository, userId), signal));
             return record.success ? record.output.client : "morty";
@@ -157,57 +94,6 @@ export function createBrowserVault(apiOrigin: string): Vault {
             return connection.success ? connection.output : null;
         },
         forgetConnection: (signal) => remove(connectionSlot, signal),
-        savePending: async (session, signal) => {
-            const account = await readSessionAccount(session, signal);
-            await put(
-                pendingSlot(session.purpose, session.repository, session.userId),
-                {
-                    // Old launchers only understand the unnamed secret. Reject named pending sessions there rather than overwrite it.
-                    version: account === LEGACY_ACCOUNT ? 1 : 2,
-                    purpose: session.purpose,
-                    repository: session.repository,
-                    userId: session.userId,
-                    requestId: session.requestId,
-                    issue: session.issue,
-                    startedAt: session.startedAt,
-                    publicKey: session.key.publicKey,
-                    privateKey: session.key.privateKey,
-                },
-                signal,
-            );
-        },
-        loadPending: async (purpose, repository, userId, signal) => {
-            const record = v.safeParse(pendingSchema, await get(pendingSlot(purpose, repository, userId), signal));
-            if (
-                !record.success ||
-                record.output.purpose !== purpose ||
-                record.output.repository !== repository ||
-                record.output.userId !== userId ||
-                record.output.privateKey.extractable ||
-                record.output.privateKey.algorithm.name !== "X25519"
-            ) {
-                return null;
-            }
-            if (record.output.version === 2) {
-                const target = v.safeParse(
-                    v.strictObject({ version: v.literal(1), account: accountIdSchema }),
-                    await get(accountSlot(record.output), signal),
-                );
-                if (!target.success || target.output.account === LEGACY_ACCOUNT) {
-                    throw new AppError("storage_unavailable");
-                }
-            }
-            const { publicKey, privateKey, version: _version, ...session } = record.output;
-            return { ...session, key: { publicKey, privateKey } };
-        },
-        forgetPending: async (purpose, repository, userId, signal) => {
-            const slot = pendingSlot(purpose, repository, userId);
-            const record = v.safeParse(pendingSchema, await get(slot, signal));
-            await remove(slot, signal);
-            if (record.success) {
-                await remove(accountSlot(record.output), signal);
-            }
-        },
         history: async (repository, userId, signal) => {
             const saved = v.safeParse(historySchema, await getSealed(historySlot(repository, userId), signal));
             if (saved.success) {
