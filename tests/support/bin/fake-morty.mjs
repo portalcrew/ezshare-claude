@@ -1,3 +1,4 @@
+import { createCipheriv, hkdfSync, randomBytes } from "node:crypto";
 // Controlled stand-in for npx executing the current Morty CLI: setup NDJSON output and stop.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -148,24 +149,36 @@ if (args[0] === "setup") {
     }
     appendFileSync(session, `${JSON.stringify({ type: "assistant", text: "turn via morty" })}\n`);
     writeFileSync(join(process.env.HOME, "workspace", "notes.txt"), "kept between sessions\n", { flag: "a" });
-    const url = new URL("https://morty.build/continue");
-    url.searchParams.set("harness", "claude");
-    url.searchParams.set("sessionId", value("--session-id"));
-    if (existsSync(join(process.env.HOME, ".morty-legacy-handoff"))) {
-        url.searchParams.set("workspace", value("--cwd"));
-        url.hash = "code=private-transfer-code";
-    } else {
-        url.hash = new URLSearchParams({
-            code: "private-transfer-code",
-            workspace: value("--cwd"),
-            e2e: Buffer.from(JSON.stringify(identity)).toString("base64url"),
-        }).toString();
-    }
-    if (existsSync(join(process.env.HOME, ".morty-conflicting-handoff"))) {
-        url.searchParams.set("workspace", "/another-member/workspace");
-    }
+    const computerId = identity.computerId;
+    const secret = randomBytes(16);
+    const derive = (purpose, length) =>
+        Buffer.from(hkdfSync("sha256", secret, "", `morty setup handoff v1 ${purpose}`, length));
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", derive("key", 32), iv);
+    cipher.setAAD(Buffer.from(`morty setup handoff v1\0${computerId}`));
+    const workspace = value("--cwd");
+    const plaintext = JSON.stringify({
+        version: 1,
+        code: "private-transfer-code",
+        encryption: JSON.stringify({ computerId }),
+        harness: "claude",
+        sessionId: value("--session-id"),
+        workspace: existsSync(join(process.env.HOME, ".morty-conflicting-handoff"))
+            ? "/another-member/workspace"
+            : workspace,
+    });
+    const sealed = Buffer.concat([iv, cipher.update(plaintext), cipher.final(), cipher.getAuthTag()]).toString(
+        "base64url",
+    );
+    writeFileSync(
+        join(process.env.HOME, `.handoff-${computerId}-${derive("lookup", 16).toString("base64url")}`),
+        sealed,
+    );
+    const url = `https://morty.build/continue#h=${computerId}.${secret.toString("base64url")}`;
     console.log(JSON.stringify({ status: "computer_online" }));
-    console.log(JSON.stringify({ status: "ready", url: url.href, accessExpiresAt: "2026-11-13T09:00:00.000Z" }));
+    console.log(
+        JSON.stringify({ status: "ready", url, computerId, workspace, accessExpiresAt: "2026-11-13T09:00:00.000Z" }),
+    );
     process.exit(0);
 }
 if (args[0] === "stop") {

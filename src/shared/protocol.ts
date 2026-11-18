@@ -266,20 +266,16 @@ export function authorizationUrl(value: string): string {
     return url.href;
 }
 
-/** Accepts only a Morty continuation link for a Claude session. */
+/** Accepts only the current sealed Morty continuation link. */
 export function mortyUrl(value: string): string {
     const url = parseUrl(value);
-    const code = new URLSearchParams(url.hash.slice(1)).get("code");
     if (
         url.origin !== "https://morty.build" ||
         url.pathname !== "/continue" ||
         url.username !== "" ||
         url.password !== "" ||
-        code === null ||
-        code.length === 0 ||
-        code.length > 4096 ||
-        url.searchParams.get("harness") !== "claude" ||
-        !v.is(requestIdSchema, url.searchParams.get("sessionId"))
+        url.search !== "" ||
+        !/^#h=[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\.[A-Za-z0-9_-]{22}$/u.test(url.hash)
     ) {
         throw new AppError("invalid_response");
     }

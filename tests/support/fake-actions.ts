@@ -1,4 +1,6 @@
+import { once } from "node:events";
 import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prepareChannelKey } from "../../src/runner/channel-key.ts";
@@ -45,7 +47,7 @@ export async function startFakeActions(
             | "computer-revoked"
             | "relay-transient"
             | "relay-unavailable";
-        readonly mortyHandoff?: "legacy" | "encrypted" | "conflicting";
+        readonly mortyHandoff?: "conflicting";
         readonly sharedToken: (account?: string) => string | null;
     },
 ) {
@@ -62,6 +64,37 @@ export async function startFakeActions(
         await chmod(join(bin, name), 0o755);
     }
     const jobs = new Map<number, Job>();
+    const relay = createServer(async (request, response) => {
+        response.setHeader("access-control-allow-origin", "*");
+        response.setHeader("access-control-allow-methods", "GET");
+        if (request.method === "OPTIONS") {
+            response.writeHead(204).end();
+            return;
+        }
+        const lookup = /^\/morty\/api\/v1\/computers\/([\w-]+)\/identity\/setup-handoffs\/([\w-]+)$/u.exec(
+            request.url ?? "",
+        );
+        const [computer, key] = lookup?.slice(1) ?? [];
+        if (request.method === "GET" && computer !== undefined && key !== undefined) {
+            for (const job of jobs.values()) {
+                const sealed = await readFile(join(job.agentHome, `.handoff-${computer}-${key}`), "utf8").catch(
+                    () => null,
+                );
+                if (sealed !== null) {
+                    response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ sealed }));
+                    return;
+                }
+            }
+        }
+        response.writeHead(410).end();
+    });
+    relay.listen(0, "127.0.0.1");
+    await once(relay, "listening");
+    const address = relay.address();
+    if (address === null || typeof address === "string") {
+        throw new Error("Expected a TCP relay");
+    }
+    const relayOrigin = `http://127.0.0.1:${address.port}`;
     // The Actions cache of the default branch: entry key -> directory, in creation order.
     const cache = new Map<string, string>();
     let hold = false;
@@ -78,9 +111,6 @@ export async function startFakeActions(
         await mkdir(join(job.agentHome, "workspace"), { recursive: true });
         if (options.mortyHandoff === "conflicting") {
             await writeFile(join(job.agentHome, ".morty-conflicting-handoff"), "conflicting");
-        }
-        if (options.mortyHandoff === "legacy") {
-            await writeFile(join(job.agentHome, ".morty-legacy-handoff"), "legacy");
         }
         if (options.mortyFailure !== undefined) {
             await writeFile(join(job.agentHome, ".morty-failure"), options.mortyFailure);
@@ -130,6 +160,7 @@ export async function startFakeActions(
         const ports = {
             clock: options.clock,
             diagnostics: (record: DiagnosticRecord) => job.diagnostics.push(record),
+            mortyRelayOrigin: relayOrigin,
             historyCache: {
                 save: async (key: string, archive: string, signal: AbortSignal): Promise<void> => {
                     throwIfCancelled(signal);
@@ -300,6 +331,8 @@ export async function startFakeActions(
                 );
         },
         close: async () => {
+            relay.closeAllConnections();
+            relay.close();
             hold = true;
             for (const job of jobs.values()) {
                 job.run.cancel.abort(new DOMException("Test finished", "AbortError"));

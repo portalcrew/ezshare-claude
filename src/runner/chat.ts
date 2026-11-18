@@ -8,9 +8,7 @@ import {
     type HistoryEnd,
     type HistoryMode,
     type HistoryStart,
-    mortyUrl,
     parseJson,
-    requestIdSchema,
 } from "../shared/protocol.ts";
 import { agentCommand, runAgentCommand } from "./agent-process.ts";
 import { type ActionsContext, agentWorkspace, historyArchivePath, type StepEnvironment } from "./context.ts";
@@ -27,6 +25,7 @@ import {
 import { claudeProject, restoreHistory } from "./history-archive.ts";
 import type { HistoryCache } from "./history-cache.ts";
 import { HistoryCheckpoints, type SavingHistory } from "./history-checkpoints.ts";
+import { verifyMortyHandoff } from "./morty-handoff.ts";
 import { type ChatRunnerChannel, createChatChannel, type RunnerPorts, runSession } from "./session.ts";
 import { VscodeSession } from "./vscode.ts";
 
@@ -34,10 +33,13 @@ const STOP_POLL_MS = 15_000;
 
 interface ChatPorts extends RunnerPorts {
     readonly historyCache: HistoryCache;
+    readonly mortyRelayOrigin?: string;
 }
 
 const mortyReadySchema = v.object({
     status: v.literal("ready"),
+    computerId: v.string(),
+    workspace: v.string(),
     url: v.pipe(v.string(), v.maxLength(8192)),
     accessExpiresAt: v.pipe(v.string(), v.isoTimestamp()),
 });
@@ -66,7 +68,14 @@ export async function runChat(
                 throw new AppError("shared_account_missing");
             }
             const path = environment["PATH"] ?? "";
-            const agent = new AgentSession(context, path, token, ports.diagnostics, ports.clock);
+            const agent = new AgentSession(
+                context,
+                path,
+                token,
+                ports.diagnostics,
+                ports.clock,
+                ports.mortyRelayOrigin,
+            );
             const vscode =
                 context.inputs.access === "vscode"
                     ? new VscodeSession(context, path, { kind: "chat", token }, ports.clock, ports.diagnostics)
@@ -257,7 +266,17 @@ class AgentSession {
     readonly #diagnostics: Diagnostics;
     readonly #clock: Clock;
 
-    constructor(context: ActionsContext, path: string, token: string, diagnostics: Diagnostics, clock: Clock) {
+    readonly #mortyRelayOrigin: string;
+
+    constructor(
+        context: ActionsContext,
+        path: string,
+        token: string,
+        diagnostics: Diagnostics,
+        clock: Clock,
+        mortyRelayOrigin = "https://morty.build",
+    ) {
+        this.#mortyRelayOrigin = mortyRelayOrigin;
         this.#clock = clock;
         this.#context = context;
         this.#diagnostics = diagnostics;
@@ -427,25 +446,19 @@ class AgentSession {
             if (!ready.success) {
                 continue;
             }
-            let url: URL;
             try {
-                url = new URL(mortyUrl(ready.output.url));
+                const url = await verifyMortyHandoff(
+                    ready.output,
+                    { sessionId, workspace: this.#workspace },
+                    this.#mortyRelayOrigin,
+                    signal,
+                );
+                return { url, accessExpiresAt: ready.output.accessExpiresAt };
             } catch (cause) {
+                signal.throwIfAborted();
                 this.#diagnostics({ event: "morty.failed", code: "HANDOFF_MISMATCH", exitCode: 0 });
                 throw new AppError("morty_unavailable", { cause });
             }
-            const queryWorkspace = url.searchParams.get("workspace");
-            const workspace = new URLSearchParams(url.hash.slice(1)).get("workspace") ?? queryWorkspace;
-            if (
-                !v.is(requestIdSchema, sessionId) ||
-                url.searchParams.get("sessionId") !== sessionId ||
-                workspace !== this.#workspace ||
-                (queryWorkspace !== null && queryWorkspace !== workspace)
-            ) {
-                this.#diagnostics({ event: "morty.failed", code: "HANDOFF_MISMATCH", exitCode: 0 });
-                throw new AppError("morty_unavailable");
-            }
-            return { url: url.href, accessExpiresAt: ready.output.accessExpiresAt };
         }
         this.#diagnostics({ event: "morty.failed", code: "READY_OUTPUT_INVALID", exitCode: 0 });
         throw new AppError("morty_unavailable");

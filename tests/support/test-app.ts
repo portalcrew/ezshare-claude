@@ -44,7 +44,7 @@ export async function createTestApp(
             | "computer-revoked"
             | "relay-transient"
             | "relay-unavailable";
-        readonly mortyHandoff?: "legacy" | "encrypted" | "conflicting";
+        readonly mortyHandoff?: "conflicting";
     } = {},
 ) {
     const clock = new TestClock("2026-11-13T08:00:00.000Z");
