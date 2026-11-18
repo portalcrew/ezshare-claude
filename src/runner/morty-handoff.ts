@@ -47,7 +47,7 @@ export async function verifyMortyHandoff(
     if (bytes.length <= 28) {
         throw new AppError("invalid_response");
     }
-    const decipher = createDecipheriv("aes-256-gcm", derive("key", 32), bytes.subarray(0, 12));
+    const decipher = createDecipheriv("aes-256-gcm", derive("key", 32), bytes.subarray(0, 12), { authTagLength: 16 });
     decipher.setAAD(Buffer.from(`morty setup handoff v1\0${computerId}`));
     decipher.setAuthTag(bytes.subarray(-16));
     const payload = Buffer.concat([decipher.update(bytes.subarray(12, -16)), decipher.final()]);

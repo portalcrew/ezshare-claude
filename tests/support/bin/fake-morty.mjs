@@ -154,7 +154,7 @@ if (args[0] === "setup") {
     const derive = (purpose, length) =>
         Buffer.from(hkdfSync("sha256", secret, "", `morty setup handoff v1 ${purpose}`, length));
     const iv = randomBytes(12);
-    const cipher = createCipheriv("aes-256-gcm", derive("key", 32), iv);
+    const cipher = createCipheriv("aes-256-gcm", derive("key", 32), iv, { authTagLength: 16 });
     cipher.setAAD(Buffer.from(`morty setup handoff v1\0${computerId}`));
     const workspace = value("--cwd");
     const plaintext = JSON.stringify({
