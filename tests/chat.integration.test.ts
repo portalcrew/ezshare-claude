@@ -87,7 +87,7 @@ test("Given another member can post as the Actions bot, When she forges a ready 
         outbound: chatRunnerMessageSchema,
         inbound: chatBrowserMessageSchema,
     });
-    const attackerLink = `https://morty.build/continue?harness=claude&sessionId=${crypto.randomUUID()}#code=attacker`;
+    const attackerLink = `https://morty.build/continue#h=${crypto.randomUUID()}.AAAAAAAAAAAAAAAAAAAAAA`;
     await forged.send(
         { kind: "ready", body: { url: attackerLink, accessExpiresAt: "2026-11-13T09:00:00.000Z", history: "new" } },
         AbortSignal.timeout(5000),

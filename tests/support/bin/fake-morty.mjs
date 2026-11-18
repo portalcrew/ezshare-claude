@@ -14,12 +14,12 @@ if (
     process.exit(2);
 }
 const args = invocation.slice(4);
+const value = (name) => args[args.indexOf(name) + 1];
 const log = `${process.env.HOME ?? "/nonexistent"}.agent-env.jsonl`;
 appendFileSync(
     log,
-    `${JSON.stringify({ program: "npx", package: invocation[3], command: args[0], names: Object.keys(process.env).sort(), configHome: process.env.XDG_CONFIG_HOME ?? null })}\n`,
+    `${JSON.stringify({ program: "npx", package: invocation[3], command: args[0], sessionId: args[0] === "setup" ? value("--session-id") : null, names: Object.keys(process.env).sort(), configHome: process.env.XDG_CONFIG_HOME ?? null })}\n`,
 );
-const value = (name) => args[args.indexOf(name) + 1];
 
 if (args[0] === "setup") {
     if (existsSync(join(process.env.HOME, ".morty-failure"))) {

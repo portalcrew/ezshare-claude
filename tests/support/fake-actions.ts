@@ -326,8 +326,16 @@ export async function startFakeActions(
             return text
                 .split("\n")
                 .filter((line) => line.length > 0)
-                .map((line): { program: string; command: string; names: string[]; configHome: string | null } =>
-                    JSON.parse(line),
+                .map(
+                    (
+                        line,
+                    ): {
+                        program: string;
+                        command: string;
+                        names: string[];
+                        configHome: string | null;
+                        sessionId?: string | null;
+                    } => JSON.parse(line),
                 );
         },
         close: async () => {

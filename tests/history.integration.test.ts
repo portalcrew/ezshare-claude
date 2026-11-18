@@ -2,7 +2,6 @@ import { appendFile, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { IDBFactory } from "fake-indexeddb";
-import * as v from "valibot";
 import { afterEach, expect, test } from "vitest";
 import { connect } from "./support/scenario.ts";
 import { alice, bob, createTestApp, type TestApp, tokens } from "./support/test-app.ts";
@@ -16,13 +15,17 @@ afterEach(async () => {
 const finalCacheKeys = (current: TestApp) =>
     [...current.actions.cache.keys()].filter((key) => !key.includes("-checkpoint-"));
 
-function computer(url: URL): string {
-    const encoded = new URLSearchParams(url.hash.slice(1)).get("e2e");
-    const data: unknown = JSON.parse(Buffer.from(encoded ?? "", "base64url").toString("utf8"));
-    return v.parse(v.object({ computerId: v.string() }), data).computerId;
+async function readySession(current: TestApp, runId: number, link: HTMLElement) {
+    const fragment = new URL(link.getAttribute("href") ?? "").hash;
+    const computerId = /^#h=(.+)\.[\w-]{22}$/u.exec(fragment)?.[1];
+    const sessionId = (await current.actions.agentLog(runId)).find((entry) => entry.program === "npx")?.sessionId;
+    if (computerId === undefined || typeof sessionId !== "string") {
+        throw new Error("Expected a sealed link and an attached Claude session");
+    }
+    return { computerId, sessionId, runId };
 }
 
-async function runSession(current: TestApp): Promise<{ readonly url: URL; readonly runId: number }> {
+async function runSession(current: TestApp) {
     const body = document.body;
     await current.user.click(await current.eventually(() => getByRole(body, "button", { name: "Start a session" })));
     const link = await current.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
@@ -30,7 +33,7 @@ async function runSession(current: TestApp): Promise<{ readonly url: URL; readon
     if (run === undefined) {
         throw new Error("Expected a dispatched run");
     }
-    return { url: new URL(link.getAttribute("href") ?? ""), runId: run.id };
+    return readySession(current, run.id, link);
 }
 
 async function endSession(current: TestApp): Promise<string> {
@@ -75,9 +78,9 @@ test("Given a member ended a session, When she starts the next one, Then it cont
     expect(finalCacheKeys(app)).toEqual([`ezshare-history-${alice.id}-run-${first.runId}`]);
 
     const second = await runSession(app);
-    expect(computer(second.url)).toBe(computer(first.url));
+    expect(second.computerId).toBe(first.computerId);
     expect(getByRole(body, "main").textContent).toContain("Your previous conversation and workspace are restored");
-    expect(second.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
+    expect(second.sessionId).toBe(first.sessionId);
     // The restored Claude session is attached directly; no new one is created.
     expect((await app.actions.agentLog(second.runId)).map((entry) => entry.command)).toEqual(["setup"]);
     const job = app.actions.jobs.get(second.runId);
@@ -101,7 +104,7 @@ test("Given history saved from another browser, When the member starts a session
     await switchBrowser(app);
     const second = await runSession(app);
     expect(getByRole(body, "main").textContent).toContain("Your saved history could not be opened");
-    expect(second.url.searchParams.get("sessionId")).not.toBe(first.url.searchParams.get("sessionId"));
+    expect(second.sessionId).not.toBe(first.sessionId);
     await app.user.click(getByRole(body, "button", { name: "Replace it from the next session" }));
     await app.eventually(() =>
         expect(getByRole(body, "main").textContent).toContain("Your next session will replace it"),
@@ -119,7 +122,7 @@ test("Given history saved from another browser, When the member starts a session
 
     const fourth = await runSession(app);
     expect(getByRole(body, "main").textContent).toContain("restored");
-    expect(fourth.url.searchParams.get("sessionId")).toBe(third.url.searchParams.get("sessionId"));
+    expect(fourth.sessionId).toBe(third.sessionId);
     expect(queryByRole(body, "button", { name: "Replace it from the next session" })).toBeNull();
 });
 
@@ -172,12 +175,12 @@ test("Given an older archive without Morty identity, When the member continues t
     await rm(join(job.agentHome, "morty"), { recursive: true, force: true });
     await endSession(app);
     const migrated = await runSession(app);
-    expect(migrated.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
-    expect(computer(migrated.url)).not.toBe(computer(first.url));
+    expect(migrated.sessionId).toBe(first.sessionId);
+    expect(migrated.computerId).not.toBe(first.computerId);
     await endSession(app);
     const continued = await runSession(app);
-    expect(computer(continued.url)).toBe(computer(migrated.url));
-    expect(continued.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
+    expect(continued.computerId).toBe(migrated.computerId);
+    expect(continued.sessionId).toBe(first.sessionId);
 });
 
 test("Given the launcher closes before unlocking history, When the key deadline expires, Then no new Computer or archive is created", async () => {
@@ -226,9 +229,9 @@ test("Given saved conversation and Morty identity, When the member chooses a new
     });
     app.actions.release();
     const link = await app.eventually(() => getByRole(document.body, "link", { name: /Open chat/u }));
-    const second = { url: new URL(link.getAttribute("href") ?? ""), runId: dispatched.id };
-    expect(computer(second.url)).not.toBe(computer(first.url));
-    expect(second.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
+    const second = await readySession(app, dispatched.id, link);
+    expect(second.computerId).not.toBe(first.computerId);
+    expect(second.sessionId).toBe(first.sessionId);
     const job = app.actions.jobs.get(second.runId);
     if (job === undefined) {
         throw new Error("Expected the session job");
@@ -241,8 +244,8 @@ test("Given saved conversation and Morty identity, When the member chooses a new
     );
     await endSession(app);
     const third = await runSession(app);
-    expect(computer(third.url)).toBe(computer(second.url));
-    expect(third.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
+    expect(third.computerId).toBe(second.computerId);
+    expect(third.sessionId).toBe(first.sessionId);
 });
 
 test("Given an archived Morty Computer was revoked, When the member starts again, Then only Morty identity is renewed and Claude history survives this and the next session", async () => {
@@ -255,17 +258,17 @@ test("Given an archived Morty Computer was revoked, When the member starts again
     }
     await writeFile(
         join(home, "morty", "config.json"),
-        JSON.stringify({ computerId: computer(first.url), revoked: true }),
+        JSON.stringify({ computerId: first.computerId, revoked: true }),
     );
     await endSession(app);
     const second = await runSession(app);
-    expect(computer(second.url)).not.toBe(computer(first.url));
-    expect(second.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
+    expect(second.computerId).not.toBe(first.computerId);
+    expect(second.sessionId).toBe(first.sessionId);
     expect(document.body.textContent).toContain("Your previous conversation and workspace are restored");
     await endSession(app);
     const third = await runSession(app);
-    expect(computer(third.url)).toBe(computer(second.url));
-    expect(third.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
+    expect(third.computerId).toBe(second.computerId);
+    expect(third.sessionId).toBe(first.sessionId);
 });
 
 test("Given a running session, When a runner dies after an automatic encrypted save, Then the next session restores the last uploaded conversation and workspace", async () => {
@@ -297,8 +300,8 @@ test("Given a running session, When a runner dies after an automatic encrypted s
         throw new Error("Expected the restored workspace");
     }
     expect(await readFile(join(nextHome, "workspace", "checkpoint.txt"), "utf8")).toBe("saved while running");
-    expect(next.url.searchParams.get("sessionId")).toBe(first.url.searchParams.get("sessionId"));
-    expect(computer(next.url)).toBe(computer(first.url));
+    expect(next.sessionId).toBe(first.sessionId);
+    expect(next.computerId).toBe(first.computerId);
 });
 
 test("Given a saved running session, When uploads fail and later recover, Then the last good snapshot remains and automatic saving retries without ending the chat", async () => {
@@ -345,7 +348,7 @@ test("Given a member keeps chatting, When several automatic saves succeed, Then 
     const project = join(home, ".claude", "projects", join(home, "workspace").replaceAll(/[^A-Za-z0-9]/gu, "-"));
     for (const sequence of [2, 3, 4]) {
         await appendFile(
-            join(project, `${running.url.searchParams.get("sessionId")}.jsonl`),
+            join(project, `${running.sessionId}.jsonl`),
             `${JSON.stringify({ type: "user", message: "still chatting" })}\n`,
         );
         app.clock.advance(5 * 60_000);
