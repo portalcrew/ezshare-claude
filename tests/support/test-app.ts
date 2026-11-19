@@ -84,7 +84,7 @@ export async function createTestApp(
     const launcherOptions = {
         apiOrigin: github.origin,
         clock,
-        ...(options.githubApp === undefined ? {} : { githubApp: options.githubApp }),
+        githubApp: options.githubApp ?? { clientId: "", brokerOrigin: "" },
         ...(options.defaultRepository === undefined ? {} : { defaultRepository: options.defaultRepository }),
     };
     let unmount = mountLauncher(root(), launcherOptions);
