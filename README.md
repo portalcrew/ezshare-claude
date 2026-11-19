@@ -10,14 +10,14 @@ metadata:
 
 Share Claude Code accounts with your team while every member keeps a private session.
 
-A member opens the launcher, connects with a fine-grained GitHub token and starts a session. GitHub Actions
-starts a fresh runner for that member. Claude Code uses the account the member selected, and the session opens
-through Morty or VS Code. Sessions last up to four hours and end early after 15 minutes without a new Claude
+A member signs in to the launcher and taps **Wake Claude** on **My Claude**, their personal workspace. GitHub
+Actions starts a fresh runner for that member. Claude Code uses the team account (chosen automatically when there
+is only one), and **Open Claude** opens the workspace through Morty or VS Code. **Put to sleep** ends it early. Sessions last up to four hours and end early after 15 minutes without a new Claude
 turn, which frees the runner. The runner encrypts and uploads the member's Claude conversation and workspace
 after startup, after each five-minute interval, and during normal shutdown, including an idle stop. The key is
 kept only in that browser. An unreadable archive
 is not overwritten unless the member chooses to replace it; clearing browser data loses its key. An account
-owner adds or reauthorizes shared Claude accounts from the same launcher.
+owner adds or reauthorizes shared Claude accounts from **Team accounts** in the launcher's account menu.
 
 Morty normally reuses the archived Computer identity. If setup reports exactly `computer_revoked`, the runner
 clears only its dedicated Morty directory and retries once with a new identity, retaining the Claude session
@@ -77,7 +77,7 @@ Forks do not inherit shared Claude credentials: an account owner must add accoun
 
 ## Shared accounts
 
-**Manage shared accounts** lists stored accounts and their last credential update time. A stored credential does
+**Team accounts** (in the account menu) lists stored accounts and their last credential update time. A stored credential does
 not prove Claude still accepts it; Claude checks authorization when a session starts. An empty repository shows
 **No accounts shared yet**. A permissions or network error is shown separately and is never treated as an empty
 inventory.
@@ -90,9 +90,9 @@ inventory.
   may continue to work; revoke the token in Claude account settings to invalidate those copies. Removing an
   account never deletes members' conversation history.
 
-The original `EZSHARE_CLAUDE_TOKEN` appears as **Previously shared account** automatically; no migration or new
-Claude login is required to keep using it. Under **Use a shared account**, one available account is selected
-initially. With multiple accounts, the member explicitly chooses one before starting. An account removed after
+The original `EZSHARE_CLAUDE_TOKEN` appears as **Team account** automatically; no migration or new
+Claude login is required to keep using it. On **My Claude**, a single available account is selected without
+showing a picker. With multiple accounts, the member explicitly chooses one before waking Claude. An account removed after
 selection is not silently replaced by another. Account and interface changes keep the same personal history key
 for that GitHub repository and numeric user ID.
 
@@ -110,8 +110,8 @@ Account identifiers contain a reversible Base32 label and a random suffix. Label
 identity claims. The dispatch workflow allocates no runner and forwards one named credential to the reusable
 worker; it does not inherit the repository's Secrets context. The selected account and channel key stay on the
 current page's task object. There are no browser `account:` or `pending:` writes, versioned pending-record
-readers, or task restoration after a page reload. Keep the launcher open through authorization or until you
-save and end a chat. Switching between launcher tabs preserves the current task. A new page can see and end a
+readers, or task restoration after a page reload. Keep the launcher open through authorization and while Claude
+is awake. Switching between launcher tabs preserves the current task. A new page can see and end a
 blocking run but cannot recover its private entry. Existing transient records are ignored. The encrypted
 GitHub connection, personal history key, interface preference, and saved history archive formats are unchanged.
 
@@ -132,7 +132,7 @@ GitHub connection, personal history key, interface preference, and saved history
    encryption keys with every other Pages site on that host. A repository path is not an isolation boundary.
    Only connect with a real token when all sites on that host are trusted, or use a dedicated custom hostname.
    Changing the hostname later changes the origin and does not migrate browser history keys automatically.
-5. The account owner opens **Manage shared accounts → Add account** in the fork's launcher, gives it a short
+5. The account owner opens **Team accounts → Add account** from the fork's launcher account menu, gives it a short
    team-visible label and completes Claude authorization. The owner can use the current browser or the runner
    through desktop VS Code's Integrated Browser. A member's fine-grained token selects only the fork and needs
    Actions/Issues read and write plus Secrets read to list account metadata. Adding, reauthorizing or removing an
