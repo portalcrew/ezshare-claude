@@ -1,6 +1,6 @@
 import { getByLabelText, getByRole, getByText, queryByRole, within } from "@testing-library/dom";
 import { afterEach, expect, test } from "vitest";
-import { connect } from "./support/scenario.ts";
+import { connect, openPage } from "./support/scenario.ts";
 import { alice, createTestApp, REPOSITORY, type TestApp, tokens } from "./support/test-app.ts";
 
 let app: TestApp | undefined;
@@ -25,11 +25,12 @@ test("Given a connected member, When she reloads, Then she stays connected; When
     app = await createTestApp();
     const body = document.body;
     await connect(app, tokens.alice);
+    await openPage(app, "Settings & troubleshooting");
     await app.eventually(() => getByText(body, "alice"));
-    expect(getByText(body, "Public repository · Privacy details")).toBeTruthy();
+    expect(getByRole(body, "region", { name: "Privacy" }).textContent).toContain("Public repository");
 
     app.reload();
-    await app.eventually(() => getByRole(body, "button", { name: "Disconnect" }));
+    await app.eventually(() => getByRole(body, "button", { name: "Account menu" }));
 
     app.github.revoke(tokens.alice);
     app.reload();
@@ -44,12 +45,12 @@ test("Given a connected member, When she disconnects, Then her token is forgotte
     app = await createTestApp({ isPrivate: true });
     const body = document.body;
     await connect(app, tokens.alice);
-    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Disconnect" })));
+    await openPage(app, "Sign out");
     await app.eventually(() => getByLabelText(body, "GitHub token"));
 
     app.reload();
     await app.eventually(() => getByLabelText(body, "GitHub token"));
-    expect(queryByRole(body, "button", { name: "Disconnect" })).toBeNull();
+    expect(queryByRole(body, "button", { name: "Account menu" })).toBeNull();
 });
 
 test("Given a fork configured with its own execution repository, When a member opens the launcher, Then setup targets that repository and connects without editing it", async () => {
@@ -64,7 +65,7 @@ test("Given a fork configured with its own execution repository, When a member o
     expect(new URL(template).searchParams.get("target_name")).toBe("team");
     await app.user.type(getByLabelText(body, "GitHub token"), tokens.alice);
     await app.user.click(getByRole(body, "button", { name: "Connect" }));
-    await app.eventually(() => getByRole(body, "button", { name: "Start a session" }));
+    await app.eventually(() => getByRole(body, "button", { name: "Wake Claude" }));
     expect(getByRole(body, "main").textContent).toContain(REPOSITORY);
 });
 
@@ -73,18 +74,18 @@ test("Given a token that can identify a member but cannot dispatch workflows, Wh
     app.github.grant(tokens.alice, { user: alice, secrets: false, secretsRead: true, actions: false });
     const body = document.body;
     await connect(app, tokens.alice);
-    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Wake Claude" })));
     const warning = await app.eventually(() => getByRole(body, "region", { name: "GitHub access needs attention" }));
     expect(warning.textContent).toContain("Actions and Issues");
     expect(getByRole(body, "alert").textContent).toContain("Actions: Read and write");
     expect(warning.textContent).toContain(REPOSITORY);
-    await app.user.click(getByRole(body, "button", { name: "Manage shared accounts" }));
+    await openPage(app, "Team accounts");
     expect(getByRole(body, "region", { name: "GitHub access needs attention" })).toBeTruthy();
     await app.user.click(within(warning).getByRole("button", { name: "Replace GitHub token" }));
     await app.eventually(() => getByLabelText(body, "GitHub token"));
     app.reload();
     await app.eventually(() => getByLabelText(body, "GitHub token"));
-    expect(queryByRole(body, "button", { name: "Disconnect" })).toBeNull();
+    expect(queryByRole(body, "button", { name: "Account menu" })).toBeNull();
     expect(app.github.runs).toEqual([]);
 });
 
@@ -112,9 +113,9 @@ test("Given a launcher configured for GitHub App authorization, When a member op
         githubApp: { clientId: "Iv1_test", brokerOrigin: "https://authorization.example" },
     });
     expect(
-        await app.eventually(() => getByRole(document.body, "button", { name: "Authorize with GitHub" })),
+        await app.eventually(() => getByRole(document.body, "button", { name: "Sign in with GitHub" })),
     ).toBeTruthy();
-    await app.user.click(getByRole(document.body, "button", { name: "Use a fine-grained token" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Use a fine-grained token instead" }));
     await connect(app, tokens.alice);
     expect(await app.eventually(() => getByText(document.body, "alice"))).toBeTruthy();
 });
@@ -128,7 +129,7 @@ test("Given a GitHub callback without a matching browser request, When the launc
     const alert = await app.eventually(() => getByRole(document.body, "alert"));
     expect(alert.textContent).toContain("GitHub authorization");
     expect(location.search).toBe("");
-    await app.user.click(getByRole(document.body, "button", { name: "Use a fine-grained token" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Use a fine-grained token instead" }));
     await connect(app, tokens.alice);
     expect(await app.eventually(() => getByText(document.body, "alice"))).toBeTruthy();
 });

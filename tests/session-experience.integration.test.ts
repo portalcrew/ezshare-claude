@@ -1,6 +1,6 @@
 import { getByRole, getByText, queryByRole } from "@testing-library/dom";
 import { afterEach, expect, test } from "vitest";
-import { connect } from "./support/scenario.ts";
+import { connect, openPage } from "./support/scenario.ts";
 import { createTestApp, type TestApp, tokens } from "./support/test-app.ts";
 
 let app: TestApp | undefined;
@@ -24,7 +24,7 @@ test("Given a preferred desktop client, When a member starts and switches to the
     await app.eventually(() => {
         expect(getByRole<HTMLSelectElement>(body, "combobox", { name: "Open with" }).value).toBe("vscode-desktop");
     });
-    await app.user.click(getByRole(body, "button", { name: "Start a session" }));
+    await app.user.click(getByRole(body, "button", { name: "Wake Claude" }));
     await app.eventually(() => getByText(body, "ABCD-EFGH"));
     const run = app.github.runs[0];
     if (run === undefined) {
@@ -34,7 +34,7 @@ test("Given a preferred desktop client, When a member starts and switches to the
     await app.actions.authorizeVscode(run.id);
     await app.eventually(() => getByRole(body, "link", { name: /Open in desktop VS Code/u }));
     expect(queryByRole(body, "link", { name: /Open VS Code in browser/u })).toBeNull();
-    const timer = getByRole(body, "timer", { name: "Estimated time left" });
+    const timer = getByRole(body, "timer", { name: "Time left" });
     const before = timer.textContent;
     app.clock.advance(60_000);
     await app.eventually(() => expect(timer.textContent).not.toBe(before), 0);
@@ -43,15 +43,15 @@ test("Given a preferred desktop client, When a member starts and switches to the
     await app.eventually(() => getByRole(body, "link", { name: /Open VS Code in browser/u }));
     expect(queryByRole(body, "link", { name: /Open in desktop VS Code/u })).toBeNull();
     expect(app.github.runs).toHaveLength(1);
-    await app.user.click(getByRole(body, "button", { name: "Manage shared accounts" }));
-    await app.user.click(getByRole(body, "button", { name: "Use a shared account" }));
+    await openPage(app, "Team accounts");
+    await app.user.click(getByRole(body, "button", { name: "My Claude" }));
     await app.eventually(() => getByRole(body, "link", { name: /Open VS Code in browser/u }));
     expect(queryByRole(body, "link", { name: /Open in desktop VS Code/u })).toBeNull();
-    await app.user.click(getByRole(body, "button", { name: "Save and end session" }));
-    await app.eventually(() => getByText(body, "Saving and ending your session…"), 0);
+    await app.user.click(getByRole(body, "button", { name: "Put to sleep" }));
+    await app.eventually(() => getByText(body, "Saving and putting Claude to sleep…"), 0);
     await app.eventually(() =>
         expect(getByRole(body, "status").textContent).toContain(
-            "Your last session ended. Its history is saved for your next session.",
+            "Claude went to sleep. Your conversation and files are saved for next time.",
         ),
     );
 });
@@ -67,12 +67,12 @@ test("Given Alice saved a desktop preference, When Bob connects in the same brow
     await app.eventually(() =>
         expect(getByRole<HTMLSelectElement>(body, "combobox", { name: "Open with" }).disabled).toBe(false),
     );
-    await app.user.click(getByRole(body, "button", { name: "Disconnect" }));
+    await openPage(app, "Sign out");
     await connect(app, tokens.bob);
     await app.eventually(() =>
         expect(getByRole<HTMLSelectElement>(body, "combobox", { name: "Open with" }).value).toBe("morty"),
     );
-    await app.user.click(getByRole(body, "button", { name: "Disconnect" }));
+    await openPage(app, "Sign out");
     await connect(app, tokens.alice);
     await app.eventually(() =>
         expect(getByRole<HTMLSelectElement>(body, "combobox", { name: "Open with" }).value).toBe("vscode-desktop"),

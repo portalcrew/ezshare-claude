@@ -11,3 +11,13 @@ export async function connect(app: TestApp, token: string): Promise<void> {
     await app.user.type(getByLabelText(body, "GitHub token"), token);
     await app.user.click(getByRole(body, "button", { name: "Connect" }));
 }
+
+/** Opens a page from the account menu, as a member does to reach team accounts or settings. */
+export async function openPage(
+    app: TestApp,
+    page: "My Claude" | "Team accounts" | "Settings & troubleshooting" | "Sign out",
+): Promise<void> {
+    const body = document.body;
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Account menu" })));
+    await app.user.click(getByRole(body, "menuitem", { name: page }));
+}

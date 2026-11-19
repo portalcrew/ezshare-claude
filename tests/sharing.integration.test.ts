@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { getByLabelText, getByRole, queryByRole, within } from "@testing-library/dom";
 import { afterEach, expect, test } from "vitest";
 import { SHARED_SECRET_NAME } from "../src/shared/protocol.ts";
-import { connect } from "./support/scenario.ts";
+import { connect, openPage } from "./support/scenario.ts";
 import { createTestApp, type TestApp, tokens } from "./support/test-app.ts";
 
 let app: TestApp | undefined;
@@ -14,11 +14,9 @@ afterEach(async () => {
 
 async function openSharing(current: TestApp, token: string): Promise<void> {
     await connect(current, token);
-    await current.user.click(
-        await current.eventually(() => getByRole(document.body, "button", { name: "Manage shared accounts" })),
-    );
+    await openPage(current, "Team accounts");
     await current.eventually(() => getByRole(document.body, "button", { name: "Add account" }));
-    const legacy = queryByRole(document.body, "group", { name: "Previously shared account" });
+    const legacy = queryByRole(document.body, "group", { name: "Team account" });
     if (legacy !== null) {
         await current.user.click(within(legacy).getByRole("button", { name: "Reauthorize" }));
     } else {
@@ -31,7 +29,7 @@ test("Given the account owner, When she authorizes Claude and pastes the code, T
     app = await createTestApp();
     const body = document.body;
     await openSharing(app, tokens.olivia);
-    expect(getByRole(body, "region", { name: "Shared Claude accounts" }).textContent).toContain(
+    expect(getByRole(body, "region", { name: "Team accounts" }).textContent).toContain(
         "Every member with write access can read the token",
     );
     await app.user.click(getByRole(body, "button", { name: "I understand, start authorization" }));
@@ -49,7 +47,7 @@ test("Given the account owner, When she authorizes Claude and pastes the code, T
     expect(app.github.issues[0]?.state).toBe("closed");
 
     app.reload();
-    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Manage shared accounts" })));
+    await openPage(app, "Team accounts");
     await app.eventually(() => getByRole(body, "button", { name: "Add account" }));
     expect(body.textContent).not.toContain("Shared with the team");
 });
@@ -92,7 +90,7 @@ test("Given an unprotected default branch, When the owner opens sharing, Then sh
     const body = document.body;
     app.actions.holdQueue();
     await openSharing(app, tokens.olivia);
-    expect(getByRole(body, "region", { name: "Shared Claude accounts" }).textContent).toContain(
+    expect(getByRole(body, "region", { name: "Team accounts" }).textContent).toContain(
         "The default branch is not protected",
     );
     await app.user.click(getByRole(body, "button", { name: "I understand, start authorization" }));

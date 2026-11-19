@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, expect, test } from "vitest";
-import { connect } from "./support/scenario.ts";
+import { connect, openPage } from "./support/scenario.ts";
 import { alice, bob, createTestApp, type TestApp, tokens } from "./support/test-app.ts";
 
 let app: TestApp | undefined;
@@ -27,8 +27,8 @@ async function readySession(current: TestApp, runId: number, link: HTMLElement) 
 
 async function runSession(current: TestApp) {
     const body = document.body;
-    await current.user.click(await current.eventually(() => getByRole(body, "button", { name: "Start a session" })));
-    const link = await current.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
+    await current.user.click(await current.eventually(() => getByRole(body, "button", { name: "Wake Claude" })));
+    const link = await current.eventually(() => getByRole(body, "link", { name: /Open Claude/u }));
     const run = current.github.runs.at(-1);
     if (run === undefined) {
         throw new Error("Expected a dispatched run");
@@ -42,18 +42,18 @@ async function endSession(current: TestApp): Promise<string> {
     if (run === undefined) {
         throw new Error("Expected the session run");
     }
-    const button = getByRole(body, "button", { name: /^(Save and end session|End session)$/u });
-    const expected = button.textContent?.includes("Save and end session")
-        ? "Saving and ending your session…"
-        : "Ending your session…";
+    const button = getByRole(body, "button", { name: /^Put to sleep( without saving)?$/u });
+    const expected = button.textContent?.includes("without saving")
+        ? "Putting Claude to sleep…"
+        : "Saving and putting Claude to sleep…";
     await current.user.click(button);
     const feedback = await current.eventually(() => {
         const text = getByRole(body, "status").textContent;
-        expect(text).toMatch(/^(Saving and ending your session…|Ending your session…)$/u);
+        expect(text).toMatch(/^(Saving and putting Claude to sleep…|Putting Claude to sleep…)$/u);
         return text;
     }, 0);
     expect(feedback).toBe(expected);
-    await current.eventually(() => getByRole(body, "button", { name: "Start a session" }));
+    await current.eventually(() => getByRole(body, "button", { name: "Wake Claude" }));
     const message = getByRole(body, "status").textContent ?? "";
     // The stopped message precedes the workflow's cache-save step.
     await current.eventually(() => expect(run.status).toBe("completed"));
@@ -74,7 +74,7 @@ test("Given a member ended a session, When she starts the next one, Then it cont
 
     const first = await runSession(app);
     expect(getByRole(body, "main").textContent).toContain("New workspace.");
-    expect(await endSession(app)).toContain("Its history is saved for your next session");
+    expect(await endSession(app)).toContain("Your conversation and files are saved for next time");
     expect(finalCacheKeys(app)).toEqual([`ezshare-history-${alice.id}-run-${first.runId}`]);
 
     const second = await runSession(app);
@@ -90,7 +90,7 @@ test("Given a member ended a session, When she starts the next one, Then it cont
     expect(await readFile(join(job?.agentHome ?? "", "morty", "computer", "sessions", "events.jsonl"), "utf8")).toBe(
         '{"text":"turn via morty"}\n{"text":"turn via morty"}\n',
     );
-    expect(await endSession(app)).toContain("Its history is saved");
+    expect(await endSession(app)).toContain("Your conversation and files are saved");
     expect(finalCacheKeys(app)).toHaveLength(2);
 });
 
@@ -105,10 +105,8 @@ test("Given history saved from another browser, When the member starts a session
     const second = await runSession(app);
     expect(getByRole(body, "main").textContent).toContain("Your saved history could not be opened");
     expect(second.sessionId).not.toBe(first.sessionId);
-    await app.user.click(getByRole(body, "button", { name: "Replace it from the next session" }));
-    await app.eventually(() =>
-        expect(getByRole(body, "main").textContent).toContain("Your next session will replace it"),
-    );
+    await app.user.click(getByRole(body, "button", { name: "Replace it from the next wake" }));
+    await app.eventually(() => expect(getByRole(body, "main").textContent).toContain("The next wake will replace it"));
     const outcome = await endSession(app);
     expect(outcome).toContain("The final save did not complete");
     expect(getByRole(body, "status").textContent).toBe(outcome);
@@ -117,13 +115,13 @@ test("Given history saved from another browser, When the member starts a session
 
     const third = await runSession(app);
     expect(getByRole(body, "main").textContent).toContain("New workspace.");
-    expect(await endSession(app)).toContain("Its history is saved");
+    expect(await endSession(app)).toContain("Your conversation and files are saved");
     expect(finalCacheKeys(app)).toHaveLength(2);
 
     const fourth = await runSession(app);
     expect(getByRole(body, "main").textContent).toContain("restored");
     expect(fourth.sessionId).toBe(third.sessionId);
-    expect(queryByRole(body, "button", { name: "Replace it from the next session" })).toBeNull();
+    expect(queryByRole(body, "button", { name: "Replace it from the next wake" })).toBeNull();
 });
 
 test.each(["modified ciphertext", "truncated tag"])(
@@ -188,7 +186,7 @@ test("Given the launcher closes before unlocking history, When the key deadline 
     const body = document.body;
     app.actions.holdQueue();
     await connect(app, tokens.alice);
-    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
+    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Wake Claude" })));
     await app.eventually(() => getByRole(body, "button", { name: "Cancel" }));
     app.suspend();
     app.actions.release();
@@ -215,11 +213,13 @@ test("Given saved conversation and Morty identity, When the member chooses a new
     await connect(app, tokens.alice);
     const first = await runSession(app);
     await endSession(app);
+    await openPage(app, "Settings & troubleshooting");
     const checkbox = getByRole(document.body, "checkbox", { name: "Use a new Morty identity" });
     expect(getByRole(document.body, "checkbox", { name: "Use a new Morty identity", checked: false })).toBe(checkbox);
     await app.user.click(checkbox);
+    await app.user.click(getByRole(document.body, "button", { name: "My Claude" }));
     app.actions.holdQueue();
-    await app.user.click(getByRole(document.body, "button", { name: "Start a session" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Wake Claude" }));
     const dispatched = await app.eventually(() => {
         const run = app?.github.runs.at(-1);
         if (run === undefined || run.id === first.runId) {
@@ -228,7 +228,7 @@ test("Given saved conversation and Morty identity, When the member chooses a new
         return run;
     });
     app.actions.release();
-    const link = await app.eventually(() => getByRole(document.body, "link", { name: /Open chat/u }));
+    const link = await app.eventually(() => getByRole(document.body, "link", { name: /Open Claude/u }));
     const second = await readySession(app, dispatched.id, link);
     expect(second.computerId).not.toBe(first.computerId);
     expect(second.sessionId).toBe(first.sessionId);
@@ -293,7 +293,7 @@ test("Given a running session, When a runner dies after an automatic encrypted s
         ).toBe(true),
     );
     await app.actions.crashRunner(first.runId);
-    await app.eventually(() => getByRole(document.body, "button", { name: "Start a session" }));
+    await app.eventually(() => getByRole(document.body, "button", { name: "Wake Claude" }));
     const next = await runSession(app);
     const nextHome = app.actions.jobs.get(next.runId)?.agentHome;
     if (nextHome === undefined) {
@@ -320,7 +320,7 @@ test("Given a saved running session, When uploads fail and later recover, Then t
         ).toBe(true),
     );
     expect([...app.actions.cache.keys()]).toEqual(before);
-    expect(getByRole(document.body, "link", { name: /Open chat/u })).toBeTruthy();
+    expect(getByRole(document.body, "link", { name: /Open Claude/u })).toBeTruthy();
     app.actions.setHistoryUploadsAvailable(true);
     app.clock.advance(5 * 60_000);
     await app.eventually(() =>
@@ -366,5 +366,5 @@ test("Given a member keeps chatting, When several automatic saves succeed, Then 
         );
     }
     await app.eventually(() => expect(app?.actions.cache.size).toBe(2));
-    expect(getByRole(document.body, "link", { name: /Open chat/u })).toBeTruthy();
+    expect(getByRole(document.body, "link", { name: /Open Claude/u })).toBeTruthy();
 });

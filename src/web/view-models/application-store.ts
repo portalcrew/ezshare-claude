@@ -12,7 +12,8 @@ import { createSharingStore, type SharingStore } from "./sharing-store.ts";
 /** Failures of connecting, including the launcher's own token policy. */
 export type ConnectionError = ErrorCode | "classic_token";
 
-export type Page = "use" | "share";
+/** The member's home is their Claude workspace; team accounts and settings are reached from the account menu. */
+export type Page = "home" | "accounts" | "settings";
 
 export interface Workspace {
     readonly id: number;
@@ -99,7 +100,7 @@ export function createApplicationStore(ports: ApplicationPorts) {
 
         const activate = (workspace: Workspace) => {
             closeWorkspace();
-            set({ phase: { kind: "connected", workspace }, page: "use" });
+            set({ phase: { kind: "connected", workspace }, page: "home" });
             workspace.chat.getState().open();
             workspace.sharing.getState().open();
         };
@@ -123,7 +124,7 @@ export function createApplicationStore(ports: ApplicationPorts) {
 
         return {
             phase: { kind: "restoring" },
-            page: "use",
+            page: "home",
             open: () => {
                 lifetime = new AbortController();
                 const signal = begin();
@@ -234,10 +235,17 @@ export function createApplicationStore(ports: ApplicationPorts) {
                 set({ page });
                 const phase = get().phase;
                 if (phase.kind === "connected") {
-                    if (page === "use") {
-                        phase.workspace.chat.getState().refresh();
-                    } else {
-                        phase.workspace.sharing.getState().refresh();
+                    switch (page) {
+                        case "home":
+                            phase.workspace.chat.getState().refresh();
+                            break;
+                        case "accounts":
+                            phase.workspace.sharing.getState().refresh();
+                            break;
+                        case "settings":
+                            break;
+                        default:
+                            page satisfies never;
                     }
                 }
             },

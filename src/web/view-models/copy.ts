@@ -70,7 +70,7 @@ export function errorMessage(code: ConnectionError): string {
         case "vscode_unavailable":
             return "VS Code could not connect. Start a new session and authorize again if asked.";
         case "morty_unavailable":
-            return "Morty could not connect. Try starting again, or choose VS Code. Your saved Claude history is kept.";
+            return "Morty could not connect. Wake Claude again, or choose VS Code to open it. Your conversation and files are kept.";
         case "provider_failed":
             return "Claude did not complete the authorization. Start again and paste the newest code.";
         case "expired":
@@ -141,23 +141,23 @@ export const commonCopy = {
 
 export const launcherCopy = {
     product: "ezshare-claude",
-    headline: "Shared accounts, private sessions.",
-    tagline: "Use Claude Code with the account your team shares, in a session only you can reach.",
+    headline: "Your team's Claude, in your own workspace.",
+    tagline: "Pick up your conversation and files where you left off, from any browser.",
 } as const;
 
 export const connectCopy = {
-    title: "Connect to GitHub",
+    title: "Sign in",
     restoring: "Restoring your connection…",
     disconnecting: "Removing your token…",
     failedTitle: "Could not connect",
-    authorize: "Authorize with GitHub",
+    authorize: "Sign in with GitHub",
     authorizing: "Connecting to GitHub…",
-    authorizationHint: "Use a shared Claude account without creating a token.",
-    manual: "Use a fine-grained token",
-    back: "Back to GitHub authorization",
-    managementTitle: "Managing accounts requires a fine-grained token",
+    authorizationHint: "No token needed to use your team's Claude.",
+    manual: "Use a fine-grained token instead",
+    back: "Back to signing in with GitHub",
+    managementTitle: "Sharing an account needs a fine-grained token",
     managementHint:
-        "GitHub authorization lets you use shared accounts. To add, reauthorize, or remove a Claude account, disconnect and use a token with Secrets: Read and write.",
+        "Signing in with GitHub lets you use these accounts. To add, reauthorize, or remove one, sign out and sign in again with a token that has Secrets: Read and write.",
 } as const;
 
 export const connectionFormCopy = {
@@ -184,7 +184,7 @@ export const connectionFormCopy = {
     connectStep: "Paste the token and connect",
     tokenLabel: "GitHub token",
     tokenHint:
-        "The token is stored encrypted in this browser so you stay connected after a reload. Use Disconnect to remove it.",
+        "The token is stored encrypted in this browser so you stay signed in after a reload. Sign out to remove it.",
     connect: "Connect",
 } as const;
 
@@ -192,25 +192,35 @@ export const connectionFormCopy = {
 export type ConnectionFormCopy = typeof connectionFormCopy;
 
 export const workspaceCopy = {
-    identity: {
-        beforeLogin: "GitHub: ",
-        beforeRepository: " · ",
-    },
-    disconnect: "Disconnect",
+    menu: "Account menu",
+    signedInAs: "Signed in as",
+    signOut: "Sign out",
+    back: "My Claude",
     identityHint:
         "This verifies your identity and repository access. Session and account-sharing permissions are checked when you use them.",
-    publicTitle: "Public repository · Privacy details",
-    privateTitle: "Privacy and access",
-    privateBody: "Session activity is visible to people with repository access.",
-    historyPrivacy: "Saved conversations and workspaces are encrypted with a key kept in this browser.",
+    publicTitle: "Public repository",
+    privateTitle: "Private repository",
+    privateBody: "People with access to the repository can see when you wake Claude and when it goes to sleep.",
+    historyPrivacy:
+        "Your conversation and files are encrypted with a key kept in this browser. Another browser, or clearing site data, starts a new history.",
     accountPrivacy:
-        "The Claude credential is shared with repository members. People who can change workflow code control what runs in your session.",
-    publicBody: "Anyone can see when sessions start and end.",
-    sections: "Sections",
+        "The Claude credential is shared with repository members. People who can change workflow code control what runs in your workspace.",
+    publicBody: "Anyone can see when you wake Claude and when it goes to sleep.",
     pages: {
-        use: "Use a shared account",
-        share: "Manage shared accounts",
+        home: "My Claude",
+        accounts: "Team accounts",
+        settings: "Settings & troubleshooting",
     } satisfies Record<Page, string>,
+} as const;
+
+export const settingsCopy = {
+    title: "Settings & troubleshooting",
+    troubleshooting: "Troubleshooting",
+    newMortyHint:
+        "Applies to the next time you wake Claude. Creates a new Morty connection; previous Morty links stop working. Your Claude conversation and files are kept. Use it when Morty cannot reach your workspace.",
+    workspaceKey: "Your workspace key",
+    privacy: "Privacy",
+    github: "GitHub",
 } as const;
 
 export const tokenAccessCopy = {
@@ -232,37 +242,47 @@ export const tokenAccessCopy = {
 } as const;
 
 export const chatCopy = {
-    title: "Your Claude session",
+    title: "My Claude",
     refresh: "Refresh now",
-    loading: "Checking your session…",
-    intro: `Use the team's Claude account in a personal workspace. Sessions last up to ${chatLifetime}.`,
+    loading: "Checking your workspace…",
+    state: {
+        asleep: "Asleep",
+        waking: "Waking",
+        awake: "Awake",
+        sleeping: "Going to sleep",
+        busy: "Running elsewhere",
+    },
+    intro: `Your conversation and files are kept between wakes. Waking takes about two to four minutes; Claude then stays awake for up to ${chatLifetime}.`,
     replacingHistory:
-        "Your next session starts with an empty history and saves it in place of the one this browser cannot read.",
-    start: "Start a session",
+        "Claude will wake with an empty history and save it in place of the one this browser cannot read.",
+    start: "Wake Claude",
     newMortyIdentity: "Use a new Morty identity",
-    newMortyIdentityHint:
-        "Deletes this session’s restored Morty state and creates a new Computer. Your Claude conversation and workspace are kept. Previous Morty links will not connect to this new session.",
-    busyTitle: "You already have a session running",
-    busyBody: "Only one session per member can run at a time. End it before starting another.",
+    newMortyIdentityPending: "Claude will wake with a new Morty connection.",
+    retryWithNewMorty: "Try again with a new Morty identity",
+    busyTitle: "Your workspace is already awake",
+    busyBody:
+        "It was woken from another tab or device, so this page cannot open it. Put it to sleep here, then wake it again.",
     endRun: (id: string) => `End run ${id}`,
-    requested: "Session requested.",
-    preparing: "Preparing your session.",
-    progress: "Session progress",
-    steps: ["Requested", "Waiting for a runner", "Preparing Claude", "Ready"],
+    requested: "Waking Claude.",
+    preparing: "Preparing your workspace.",
+    wakingTitle: "Getting Claude ready",
+    progress: "Wake progress",
+    steps: ["Requested", "Finding a machine", "Preparing Claude", "Ready"],
+    keepOpen:
+        "Keep this tab open while Claude is awake. It holds the key that unlocks your workspace and puts it back to sleep.",
     waiting: {
         beforeElapsed: "Waiting ",
-        afterElapsed:
-            ". The first start usually takes two to four minutes. Keep this launcher open so it can unlock your personal state and let you save and end the session.",
+        afterElapsed: ". This usually takes two to four minutes.",
     },
-    readyTitle: "Ready",
+    readyTitle: "Claude is ready",
     access: "Open with",
     clients: { morty: "Morty", vscode: "VS Code · Browser", "vscode-desktop": "VS Code · Desktop" },
     changeClient: "Change access method",
-    clientHint: "Your choice is remembered in this browser.",
+    clientHint: "Remembered in this browser.",
     switchClientHint: "Switching access methods keeps this session running.",
-    estimatedTime: "Estimated time left",
-    idleHint: `Ends earlier after ${chatIdleStop} without a message.`,
-    saveHint: "Encrypted saves run after startup, every five minutes, and when you end this session.",
+    estimatedTime: "Time left",
+    idleHint: `Goes to sleep after ${chatIdleStop} without a message.`,
+    saveHint: "Saved automatically, encrypted, every five minutes and when it goes to sleep.",
     forceStopHint: "Use only if saving is stuck. Unsaved changes may be lost; the previous saved history is kept.",
     savingHelp: "Saving taking too long?",
     stoppingForced: "Stopping immediately. Changes may not be saved.",
@@ -276,24 +296,23 @@ export const chatCopy = {
     vscodeAuthorize: "Authorize VS Code",
     vscodeOpen: "Open VS Code in browser",
     vscodeDesktopOpen: "Open in desktop VS Code",
-    open: "Open chat",
-    readyHint:
-        "This link gives access to your session. Keep it private. Keep this page open to save and end the session.",
-    end: "Save and end session",
-    endWithoutSave: "End session",
-    saving: "Saving and ending your session…",
-    stopping: "Ending your session…",
+    open: "Open Claude",
+    readyHint: "This link opens your workspace. Keep it private.",
+    end: "Put to sleep",
+    endWithoutSave: "Put to sleep without saving",
+    saving: "Saving and putting Claude to sleep…",
+    stopping: "Putting Claude to sleep…",
     forceStop: "Force stop without saving",
-    failedTitle: "Your last session ended with a problem",
+    failedTitle: "Claude could not stay awake",
     history: {
         restored: "Your previous conversation and workspace are restored.",
-        new: "New workspace. Your history will be saved when you end this session.",
-        off: "History is off for this session, because this page was closed while it started.",
+        new: "New workspace. It is saved automatically from now on.",
+        off: "History is off this time, because this page was closed while Claude woke up.",
         unreadableTitle: "Your saved history could not be opened",
         unreadable:
-            "It was saved from another browser, or this browser's site data was cleared. This session starts empty and does not overwrite it.",
-        willReplace: "Your next session will replace it.",
-        replace: "Replace it from the next session",
+            "It was saved from another browser, or this browser's site data was cleared. Claude woke with an empty workspace and does not overwrite it.",
+        willReplace: "The next wake will replace it.",
+        replace: "Replace it from the next wake",
     },
 } as const;
 
@@ -307,10 +326,10 @@ export function chatOutcomeText(outcome: ChatOutcome): string {
     switch (outcome.kind) {
         case "stopped":
             return outcome.history === "archived"
-                ? "Your last session ended. Its history is saved for your next session."
-                : "Your last session ended. The final save did not complete. You can still continue from your most recent saved copy, if one exists.";
+                ? "Claude went to sleep. Your conversation and files are saved for next time."
+                : "Claude went to sleep. The final save did not complete; next time continues from the most recent save, if there is one.";
         case "expired":
-            return "Your last session reached its time limit and ended.";
+            return "Claude reached its time limit and went to sleep.";
         case "failed":
             return errorMessage(outcome.code);
         default:
@@ -319,7 +338,7 @@ export function chatOutcomeText(outcome: ChatOutcome): string {
 }
 
 export const sharingCopy = {
-    title: "Shared Claude accounts",
+    title: "Team accounts",
     method: "Authorize Claude using",
     browserMethod: "This browser",
     runnerMethod: "Runner · Desktop VS Code",
@@ -383,7 +402,7 @@ export const sharingCopy = {
 } as const;
 
 export function sharedAccountLabel(account: Pick<SharedAccount, "name">): string {
-    return account.name ?? "Previously shared account";
+    return account.name ?? "Team account";
 }
 
 export function sessionAccountLabel(id: string): string {
@@ -392,12 +411,13 @@ export function sessionAccountLabel(id: string): string {
 
 export const accountsCopy = {
     title: "Shared accounts",
+    readOnly: "These are the Claude accounts your team can use.",
     count: (count: number) => `${count} shared ${count === 1 ? "account" : "accounts"}`,
     loading: "Checking shared accounts…",
     failed: "Could not check shared accounts",
     retry: "Check accounts again",
     empty: "No accounts shared yet",
-    emptyHint: "Share a Claude account to let repository members start private sessions.",
+    emptyHint: "Ask the owner of your team's Claude account to share it here, or share your own.",
     share: "Share a Claude account",
     shared: "Shared",
     availability: "A stored credential is available. Claude checks whether it is still valid when a session starts.",

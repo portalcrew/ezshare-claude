@@ -27,7 +27,7 @@ function CatalogStatus({ catalog, onRetry }: { readonly catalog: AccountCatalog;
                     <p role="status" aria-label={accountsCopy.title} className="font-medium">
                         {accountsCopy.empty}
                     </p>
-                    <p className="text-sm text-stone-600 dark:text-stone-400">{accountsCopy.emptyHint}</p>
+                    <p className="text-sm text-ink-3">{accountsCopy.emptyHint}</p>
                 </div>
             ) : null;
         default:
@@ -58,6 +58,11 @@ export function AccountsPicker({
             </div>
         );
     }
+    if (catalog.items.length === 1 && catalog.items[0]?.id === selected) {
+        // The only account is already chosen; a picker would just be another decision before waking Claude.
+        // An account chosen earlier and then removed is never replaced silently, so that case still shows it.
+        return null;
+    }
     return (
         <label className="grid gap-2 text-sm font-medium">
             {accountsCopy.picker}
@@ -65,7 +70,7 @@ export function AccountsPicker({
                 value={selected ?? ""}
                 disabled={disabled}
                 onChange={(event) => onSelect(event.currentTarget.value)}
-                className="min-h-11 min-w-0 rounded-lg border border-stone-300 bg-white px-3 text-stone-900 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
+                className="min-h-11 min-w-0 rounded-[14px] border border-hairline bg-white px-3 text-ink"
             >
                 <option value="" disabled>
                     {accountsCopy.choose}
@@ -107,7 +112,7 @@ export function AccountsManager({
             <CatalogStatus catalog={catalog} onRetry={onRetry} />
             {catalog.kind === "ready" && (
                 <>
-                    <div className="divide-y divide-stone-200 dark:divide-stone-800">
+                    <div className="divide-y divide-black/[0.06]">
                         {catalog.items.map((account) => (
                             <fieldset
                                 key={account.id}
@@ -116,10 +121,8 @@ export function AccountsManager({
                             >
                                 <div className="min-w-0 space-y-1">
                                     <p className="break-words font-medium">{sharedAccountLabel(account)}</p>
-                                    <p className="text-xs text-stone-600 dark:text-stone-400">
-                                        <span className="text-emerald-800 dark:text-emerald-300">
-                                            {accountsCopy.shared}
-                                        </span>
+                                    <p className="text-xs text-ink-3">
+                                        <span className="text-ok">{accountsCopy.shared}</span>
                                         {" · "}
                                         <time dateTime={account.updatedAt}>
                                             {accountsCopy.updated(account.updatedAt)}
@@ -145,9 +148,7 @@ export function AccountsManager({
                             </fieldset>
                         ))}
                     </div>
-                    {catalog.items.length > 0 && (
-                        <p className="text-xs text-stone-600 dark:text-stone-400">{accountsCopy.availability}</p>
-                    )}
+                    {catalog.items.length > 0 && <p className="text-xs text-ink-3">{accountsCopy.availability}</p>}
                     {editor.kind === "closed" && (
                         <Button disabled={busy} onClick={onAdd}>
                             {accountsCopy.add}
@@ -169,6 +170,36 @@ export function AccountsManager({
                         </div>
                     </div>
                 </Notice>
+            )}
+        </section>
+    );
+}
+
+/** The team's accounts for someone who cannot change them: names and when each was last authorized. */
+export function AccountsOverview({
+    catalog,
+    onRetry,
+}: {
+    readonly catalog: AccountCatalog;
+    readonly onRetry: () => void;
+}) {
+    return (
+        <section aria-label={accountsCopy.title} className="space-y-3">
+            <CatalogStatus catalog={catalog} onRetry={onRetry} />
+            {catalog.kind === "ready" && catalog.items.length > 0 && (
+                <>
+                    <p className="text-sm text-ink-3">{accountsCopy.readOnly}</p>
+                    <ul className="divide-y divide-black/[0.06] rounded-[18px] bg-canvas">
+                        {catalog.items.map((account) => (
+                            <li key={account.id} className="px-4 py-3">
+                                <p className="break-words font-medium">{sharedAccountLabel(account)}</p>
+                                <p className="text-xs text-ink-3">
+                                    <time dateTime={account.updatedAt}>{accountsCopy.updated(account.updatedAt)}</time>
+                                </p>
+                            </li>
+                        ))}
+                    </ul>
+                </>
             )}
         </section>
     );

@@ -18,8 +18,8 @@ afterEach(async () => {
 async function startSession(current: TestApp): Promise<{ readonly run: FakeRun; readonly job: Job }> {
     const body = document.body;
     await connect(current, tokens.alice);
-    await current.user.click(await current.eventually(() => getByRole(body, "button", { name: "Start a session" })));
-    await current.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
+    await current.user.click(await current.eventually(() => getByRole(body, "button", { name: "Wake Claude" })));
+    await current.eventually(() => getByRole(body, "link", { name: /Open Claude/u }));
     const run = current.github.runs.at(-1);
     const job = run === undefined ? undefined : current.actions.jobs.get(run.id);
     if (run === undefined || job === undefined) {
@@ -45,12 +45,12 @@ test("Given a ready session, When nobody uses it for 15 minutes, Then the run en
     const { run } = await startSession(current);
     const readyAt = current.clock.now();
 
-    await current.eventually(() => getByRole(body, "button", { name: "Start a session" }), 15_000);
+    await current.eventually(() => getByRole(body, "button", { name: "Wake Claude" }), 15_000);
 
     const idle = current.clock.now() - readyAt;
     expect(idle).toBeGreaterThanOrEqual(14 * MINUTE);
     expect(idle).toBeLessThan(30 * MINUTE);
-    expect(getByRole(body, "status").textContent).toContain("Its history is saved");
+    expect(getByRole(body, "status").textContent).toContain("Your conversation and files are saved");
     await current.eventually(() => expect(run.conclusion).toBe("success"));
     expect([...current.actions.cache.keys()].filter((key) => !key.includes("-checkpoint-"))).toHaveLength(1);
 });
@@ -69,5 +69,5 @@ test("Given a member keeps chatting, When more than an hour passes, Then the ses
     }
 
     expect(run.status).toBe("in_progress");
-    expect(getByRole(body, "link", { name: /Open chat/u })).toBeDefined();
+    expect(getByRole(body, "link", { name: /Open Claude/u })).toBeDefined();
 });

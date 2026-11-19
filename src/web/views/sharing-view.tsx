@@ -6,25 +6,37 @@ import { Button } from "../components/ui/button.tsx";
 import { Card } from "../components/ui/card.tsx";
 import { ExternalLink } from "../components/ui/external-link.tsx";
 import { Announcer, Notice } from "../components/ui/notice.tsx";
+import type { Workspace } from "../view-models/application-store.ts";
 import {
     accountsCopy,
     commonCopy,
+    connectCopy,
     errorMessage,
     sessionAccountLabel,
     sharedAccountLabel,
     sharingCopy,
 } from "../view-models/copy.ts";
 import type { SharingOutcome, SharingStore } from "../view-models/sharing-store.ts";
-import { AccountsManager } from "./accounts-view.tsx";
+import { AccountsManager, AccountsOverview } from "./accounts-view.tsx";
+
+/** Team accounts: owners signed in with a token manage them; everyone else sees which accounts exist. */
+export function TeamAccounts({ workspace }: { readonly workspace: Workspace }) {
+    const catalog = useStore(workspace.chat, (state) => state.accounts);
+    if (workspace.authorization === "github-app") {
+        return (
+            <Card title={sharingCopy.title}>
+                <AccountsOverview catalog={catalog} onRetry={workspace.chat.getState().refresh} />
+                <Notice tone="info" title={connectCopy.managementTitle}>
+                    {connectCopy.managementHint}
+                </Notice>
+            </Card>
+        );
+    }
+    return <SharingView store={workspace.sharing} branchProtected={workspace.branchProtected} />;
+}
 
 /** Sharing the owner's Claude account with the repository. */
-export function SharingView({
-    store,
-    branchProtected,
-}: {
-    readonly store: SharingStore;
-    readonly branchProtected: boolean;
-}) {
+function SharingView({ store, branchProtected }: { readonly store: SharingStore; readonly branchProtected: boolean }) {
     const editor = useStore(store, (state) => state.editor);
     const accounts = useStore(store, (state) => state.accounts);
     const phase = useStore(store, (state) => state.phase);
@@ -84,7 +96,7 @@ export function SharingView({
                                 {(editor.kind === "add" || editor.kind === "replace") && (
                                     <section
                                         aria-label={accountsCopy.authorizeTitle}
-                                        className="space-y-4 border-t border-stone-200 pt-5 dark:border-stone-700"
+                                        className="space-y-4 border-t border-black/[0.06] pt-5"
                                     >
                                         {editor.kind === "add" ? (
                                             <div className="grid gap-2 text-sm font-medium">
@@ -99,12 +111,9 @@ export function SharingView({
                                                     maxLength={36}
                                                     autoComplete="off"
                                                     aria-describedby="account-name-hint"
-                                                    className="min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-stone-900 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
+                                                    className="min-h-11 rounded-[14px] border border-hairline bg-white px-3 text-ink"
                                                 />
-                                                <span
-                                                    id="account-name-hint"
-                                                    className="text-sm font-normal text-stone-600 dark:text-stone-400"
-                                                >
+                                                <span id="account-name-hint" className="text-sm font-normal text-ink-3">
                                                     {accountsCopy.nameHint}
                                                 </span>
                                             </div>
@@ -114,9 +123,7 @@ export function SharingView({
                                             </p>
                                         )}
                                         <p className="text-sm">{sharingCopy.intro}</p>
-                                        <p className="text-sm text-stone-600 dark:text-stone-400">
-                                            {accountsCopy.writeAccess}
-                                        </p>
+                                        <p className="text-sm text-ink-3">{accountsCopy.writeAccess}</p>
                                         <Notice tone="warning" title={sharingCopy.risksTitle}>
                                             <ul className="list-disc space-y-1 pl-5">
                                                 {sharingCopy.risks.map((risk) => (
@@ -135,16 +142,14 @@ export function SharingView({
                                                 value={method}
                                                 disabled={command !== null}
                                                 onChange={(event) => actions.selectMethod(event.currentTarget.value)}
-                                                className="min-h-11 rounded-lg border border-stone-300 bg-white px-3 text-stone-900 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
+                                                className="min-h-11 rounded-[14px] border border-hairline bg-white px-3 text-ink"
                                             >
                                                 <option value="browser">{sharingCopy.browserMethod}</option>
                                                 <option value="vscode">{sharingCopy.runnerMethod}</option>
                                             </select>
                                         </label>
                                         {method === "vscode" && (
-                                            <p className="text-sm text-stone-600 dark:text-stone-400">
-                                                {sharingCopy.runnerMethodHint}
-                                            </p>
+                                            <p className="text-sm text-ink-3">{sharingCopy.runnerMethodHint}</p>
                                         )}
                                         <Button busy={command === "start"} onClick={actions.start}>
                                             {sharingCopy.start}
@@ -258,7 +263,7 @@ export function SharingView({
                 }
             })()}
             {phase.kind === "intro" && (
-                <p className="text-sm text-stone-600 dark:text-stone-400">
+                <p className="text-sm text-ink-3">
                     {sharingCopy.stopSharing.beforeLink}
                     <ExternalLink href={sharingCopy.stopSharing.url}>{sharingCopy.stopSharing.link}</ExternalLink>
                     {sharingCopy.stopSharing.afterLink}

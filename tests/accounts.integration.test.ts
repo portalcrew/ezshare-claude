@@ -1,7 +1,7 @@
 import { getByLabelText, getByRole, queryByRole, within } from "@testing-library/dom";
 import { afterEach, expect, test } from "vitest";
 import { accountSecret, newAccountId } from "../src/shared/accounts.ts";
-import { connect } from "./support/scenario.ts";
+import { connect, openPage } from "./support/scenario.ts";
 import { createTestApp, type TestApp, tokens } from "./support/test-app.ts";
 
 let app: TestApp | undefined;
@@ -15,7 +15,7 @@ test("Given no shared account, When a member connects, Then the empty state expl
     await connect(app, tokens.olivia);
     await app.eventually(() => getByRole(document.body, "status", { name: "Shared accounts" }));
     expect(document.body.textContent).toContain("No accounts shared yet");
-    expect(queryByRole(document.body, "button", { name: "Start a session" })).toBeNull();
+    expect(queryByRole(document.body, "button", { name: "Wake Claude" })).toBeNull();
     expect(app.github.runs).toEqual([]);
 });
 
@@ -23,7 +23,7 @@ test("Given an owner with no shared account, When she adds two accounts, refresh
     app = await createTestApp({ sharedToken: null });
     const body = document.body;
     await connect(app, tokens.olivia);
-    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Manage shared accounts" })));
+    await openPage(app, "Team accounts");
     for (const name of ["Design team", "Engineering"]) {
         await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Add account" })));
         await app.user.type(getByLabelText(body, "Account name"), name);
@@ -37,7 +37,7 @@ test("Given an owner with no shared account, When she adds two accounts, refresh
         await app.eventually(() => expect(app?.github.runs.every((run) => run.status === "completed")).toBe(true));
     }
     app.reload();
-    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Manage shared accounts" })));
+    await openPage(app, "Team accounts");
     const design = await app.eventually(() => getByRole(body, "group", { name: "Design team" }));
     expect(getByRole(body, "group", { name: "Engineering" })).toBeTruthy();
     await app.user.click(within(design).getByRole("button", { name: "Remove" }));
@@ -47,11 +47,16 @@ test("Given an owner with no shared account, When she adds two accounts, refresh
     await app.user.click(within(design).getByRole("button", { name: "Remove" }));
     await app.user.click(getByRole(body, "button", { name: "Remove account" }));
     await app.eventually(() => expect(queryByRole(body, "group", { name: "Design team" })).toBeNull());
-    await app.user.click(getByRole(body, "button", { name: "Use a shared account" }));
-    const remaining = await app.eventually(() => getByRole(body, "combobox", { name: "Claude account" }));
-    await app.user.selectOptions(remaining, within(remaining).getByRole("option", { name: "Engineering" }));
-    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Start a session" })));
-    await app.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
+    await app.user.click(getByRole(body, "button", { name: "My Claude" }));
+    const wake = await app.eventually(() => getByRole(body, "button", { name: "Wake Claude" }));
+    // The only remaining account is chosen automatically when it is the first list this page sees; otherwise the
+    // member picks it, because a removed choice is never replaced silently.
+    const remaining = queryByRole(body, "combobox", { name: "Claude account" });
+    if (remaining !== null) {
+        await app.user.selectOptions(remaining, within(remaining).getByRole("option", { name: "Engineering" }));
+    }
+    await app.user.click(wake);
+    await app.eventually(() => getByRole(body, "link", { name: /Open Claude/u }));
     expect(app.github.runs.at(-1)?.inputs["account"]).not.toBe("legacy");
 });
 
@@ -65,15 +70,15 @@ test("Given multiple accounts including the original account, When a member choo
         getByRole<HTMLSelectElement>(body, "combobox", { name: "Claude account" }),
     );
     expect(picker.value).toBe("");
-    expect(getByRole(body, "button", { name: "Start a session" }).getAttribute("aria-disabled")).toBe("true");
+    expect(getByRole(body, "button", { name: "Wake Claude" }).getAttribute("aria-disabled")).toBe("true");
     await app.user.selectOptions(picker, id);
-    await app.user.click(getByRole(body, "button", { name: "Start a session" }));
-    await app.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
+    await app.user.click(getByRole(body, "button", { name: "Wake Claude" }));
+    await app.eventually(() => getByRole(body, "link", { name: /Open Claude/u }));
     expect(app.github.runs[0]?.inputs["account"]).toBe(id);
     expect(body.textContent).toContain("Account: Engineering");
-    await app.user.click(getByRole(body, "button", { name: "Manage shared accounts" }));
-    await app.user.click(getByRole(body, "button", { name: "Use a shared account" }));
-    await app.eventually(() => getByRole(body, "link", { name: /Open chat/u }));
+    await openPage(app, "Team accounts");
+    await app.user.click(getByRole(body, "button", { name: "My Claude" }));
+    await app.eventually(() => getByRole(body, "link", { name: /Open Claude/u }));
     expect(body.textContent).toContain("Account: Engineering");
 });
 
@@ -88,7 +93,7 @@ test("Given an account was selected, When its owner removes it before the next r
         id,
     );
     app.github.setSecret(accountSecret(id), null);
-    await app.user.click(getByRole(body, "button", { name: "Start a session" }));
+    await app.user.click(getByRole(body, "button", { name: "Wake Claude" }));
     await app.eventually(() => getByRole(body, "alert"));
     expect(app.github.runs).toEqual([]);
 });
@@ -97,13 +102,13 @@ test("Given shared accounts exist, When metadata cannot be reached and then reco
     app = await createTestApp();
     const body = document.body;
     await connect(app, tokens.alice);
-    await app.eventually(() => getByRole(body, "combobox", { name: "Claude account" }));
+    await app.eventually(() => getByRole(body, "button", { name: "Wake Claude" }));
     app.github.setSecretsAvailable(false);
     await app.eventually(() => getByRole(body, "button", { name: "Check accounts again" }));
     expect(body.textContent).not.toContain("No accounts shared yet");
     app.github.setSecretsAvailable(true);
     await app.user.click(getByRole(body, "button", { name: "Check accounts again" }));
-    await app.eventually(() => getByRole(body, "combobox", { name: "Claude account" }));
+    await app.eventually(() => getByRole(body, "button", { name: "Wake Claude" }));
 });
 
 test("Given two named accounts, When one is reauthorized, Then only that credential is replaced", async () => {
@@ -114,7 +119,7 @@ test("Given two named accounts, When one is reauthorized, Then only that credent
     app.github.setSecret(accountSecret(second), "sk-ant-oat01-second-unchanged");
     await connect(app, tokens.olivia);
     const body = document.body;
-    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Manage shared accounts" })));
+    await openPage(app, "Team accounts");
     const row = await app.eventually(() => getByRole(body, "group", { name: "Team A" }));
     await app.user.click(within(row).getByRole("button", { name: "Reauthorize" }));
     await app.user.click(getByRole(body, "button", { name: "I understand, start authorization" }));
@@ -140,11 +145,11 @@ test("Given an owner with only Secrets read permission, When removing an account
     });
     const body = document.body;
     await connect(app, tokens.olivia);
-    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Manage shared accounts" })));
+    await openPage(app, "Team accounts");
     await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Remove" })));
     await app.user.click(getByRole(body, "button", { name: "Remove account" }));
     await app.eventually(() => expect(getByRole(body, "alert").textContent).toContain("Secrets: Read and write"));
-    expect(getByRole(body, "group", { name: "Previously shared account" })).toBeTruthy();
+    expect(getByRole(body, "group", { name: "Team account" })).toBeTruthy();
     expect(app.github.secretNames()).toHaveLength(1);
 });
 
@@ -154,7 +159,7 @@ test("Given an account name is already in use, When an owner tries to add the sa
     app.github.setSecret(accountSecret(id), "sk-ant-oat01-keep-this-credential");
     const body = document.body;
     await connect(app, tokens.olivia);
-    await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Manage shared accounts" })));
+    await openPage(app, "Team accounts");
     await app.user.click(await app.eventually(() => getByRole(body, "button", { name: "Add account" })));
     await app.user.type(getByLabelText(body, "Account name"), "Design team");
     await app.user.click(getByRole(body, "button", { name: "I understand, start authorization" }));
@@ -177,7 +182,7 @@ test("Given repository secrets span more than one page, When the launcher lists 
     await connect(app, tokens.alice);
     const picker = await app.eventually(() => getByRole(body, "combobox", { name: "Claude account" }));
     expect(within(picker).getByRole("option", { name: "\u8bbe\u8ba1\u56e2\u961f" })).toBeTruthy();
-    expect(within(picker).getByRole("option", { name: "Previously shared account" })).toBeTruthy();
+    expect(within(picker).getByRole("option", { name: "Team account" })).toBeTruthy();
     expect(within(picker).queryByRole("option", { name: /BUILD_SECRET/u })).toBeNull();
     expect(within(picker).getAllByRole("option")).toHaveLength(3);
 });

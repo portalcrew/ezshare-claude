@@ -4,8 +4,7 @@ import { Button, focusRing } from "./ui/button.tsx";
 import { ExternalLink } from "./ui/external-link.tsx";
 import { cn } from "./utils/cn.ts";
 
-const field =
-    "mt-1 block min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 text-sm dark:border-stone-600 dark:bg-stone-950";
+const field = "mt-1 block min-h-11 w-full rounded-[14px] border border-hairline bg-white px-3 text-sm";
 
 /** The three connection steps. The repository field is local state so the token links follow it as typed. */
 export function ConnectionForm({
@@ -38,7 +37,7 @@ export function ConnectionForm({
         <form onSubmit={submit}>
             <ol className="space-y-6">
                 <Step number={1} label={copy.stepLabel(1)} title={copy.repositoryStep}>
-                    <label className="block text-sm font-semibold">
+                    <label className="block text-sm font-medium">
                         {copy.repositoryLabel}
                         <input
                             name="repository"
@@ -71,21 +70,19 @@ export function ConnectionForm({
                                     <ExternalLink href={templates.member} prominent>
                                         {copy.memberLink}
                                     </ExternalLink>
-                                    <p className="text-sm text-stone-600 dark:text-stone-400">{copy.memberHint}</p>
+                                    <p className="text-sm text-ink-3">{copy.memberHint}</p>
                                 </div>
                                 <div className="space-y-1">
-                                    <ExternalLink href={templates.ownerSharing} prominent>
-                                        {copy.ownerLink}
-                                    </ExternalLink>
-                                    <p className="text-sm text-stone-600 dark:text-stone-400">{copy.ownerHint}</p>
+                                    <ExternalLink href={templates.ownerSharing}>{copy.ownerLink}</ExternalLink>
+                                    <p className="text-sm text-ink-3">{copy.ownerHint}</p>
                                 </div>
                             </div>
-                            <p className="text-sm text-stone-600 dark:text-stone-400">{copy.approvalHint}</p>
+                            <p className="text-sm text-ink-3">{copy.approvalHint}</p>
                         </>
                     )}
                 </Step>
                 <Step number={3} label={copy.stepLabel(3)} title={copy.connectStep}>
-                    <label className="block text-sm font-semibold">
+                    <label className="block text-sm font-medium">
                         {copy.tokenLabel}
                         <input
                             ref={token}
@@ -98,7 +95,7 @@ export function ConnectionForm({
                             className={cn(field, "font-mono", focusRing)}
                         />
                     </label>
-                    <p id={tokenHint} className="text-sm text-stone-600 dark:text-stone-400">
+                    <p id={tokenHint} className="text-sm text-ink-3">
                         {copy.tokenHint}
                     </p>
                     <Button type="submit" busy={busy}>
@@ -137,17 +134,17 @@ export function ConnectionChoices({
             {children}
         </div>
     ) : (
-        <div className="space-y-3">
-            <p className="text-sm">
-                <strong>{repository}</strong>
-            </p>
-            <p className="text-sm text-stone-600 dark:text-stone-400">{hint}</p>
-            <div className="flex flex-wrap gap-x-4 gap-y-2">
-                <Button onClick={onAuthorize}>{authorize}</Button>
-                <Button variant="secondary" onClick={() => setUsingToken(true)}>
+        <div className="space-y-4">
+            <Button onClick={onAuthorize} className="min-h-12 w-full text-[15px]">
+                {authorize}
+            </Button>
+            <p className="text-center text-sm text-ink-3">{hint}</p>
+            <div className="text-center">
+                <Button variant="quiet" onClick={() => setUsingToken(true)}>
                     {manual}
                 </Button>
             </div>
+            <p className="text-center text-xs text-ink-3">{repository}</p>
         </div>
     );
 }
@@ -168,12 +165,12 @@ function Step({
         <li className="grid grid-cols-[2rem_1fr] gap-x-3">
             <span
                 aria-hidden="true"
-                className="flex size-8 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100"
+                className="flex size-8 items-center justify-center rounded-full bg-fill text-sm font-semibold text-ink-2"
             >
                 {number}
             </span>
             <div className="space-y-3">
-                <h3 className="pt-1 font-semibold">
+                <h3 className="pt-1 font-medium">
                     <span className="sr-only">{label}</span>
                     {title}
                 </h3>
