@@ -48,17 +48,20 @@ export function RootView({
             onConnect={actions.connect}
         />
     );
+    const intro = (
+        <header className="space-y-3 pb-4 text-center">
+            <h1 className="text-balance text-[28px] leading-9 font-semibold tracking-[-0.01em]">
+                {launcherCopy.headline}
+            </h1>
+            <p className="text-pretty text-ink-3">{launcherCopy.tagline}</p>
+        </header>
+    );
     return (
         <Shell>
-            <div className="mx-auto max-w-md space-y-8 pt-6 sm:pt-14">
-                <header className="space-y-3 text-center">
-                    <h1 className="text-balance text-[28px] leading-9 font-semibold tracking-[-0.01em]">
-                        {launcherCopy.headline}
-                    </h1>
-                    <p className="text-pretty text-ink-3">{launcherCopy.tagline}</p>
-                </header>
+            <div className="mx-auto max-w-md pt-6 sm:pt-14">
                 <section aria-label={connectCopy.title} className="space-y-5">
                     <h2 className="sr-only">{connectCopy.title}</h2>
+                    {phase.kind === "disconnected" || phase.kind === "connecting" ? null : intro}
                     {(phase.kind === "restoring" || phase.kind === "disconnecting") && (
                         <p aria-busy="true" className="text-center text-sm text-ink-3">
                             {phase.kind === "restoring" ? connectCopy.restoring : connectCopy.disconnecting}
@@ -83,11 +86,15 @@ export function RootView({
                                 back={connectCopy.back}
                                 hint={connectCopy.authorizationHint}
                                 onAuthorize={actions.authorize}
+                                intro={intro}
                             >
                                 {manual}
                             </ConnectionChoices>
                         ) : (
-                            manual
+                            <>
+                                {intro}
+                                {manual}
+                            </>
                         ))}
                 </section>
             </div>

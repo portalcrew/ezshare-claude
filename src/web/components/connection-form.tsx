@@ -34,8 +34,9 @@ export function ConnectionForm({
         onConnect({ repository, token: value });
     };
     return (
-        <form onSubmit={submit}>
-            <ol className="space-y-6">
+        <form onSubmit={submit} aria-label={copy.title} className="rounded-[24px] bg-white p-6 shadow-module sm:p-7">
+            <h2 className="mb-5 text-[22px] leading-[30px] font-semibold tracking-[-0.01em]">{copy.title}</h2>
+            <ol className="space-y-7">
                 <Step number={1} label={copy.stepLabel(1)} title={copy.repositoryStep}>
                     <label className="block text-sm font-medium">
                         {copy.repositoryLabel}
@@ -65,15 +66,17 @@ export function ConnectionForm({
                                 <strong>{templates.name}</strong>
                                 {copy.templates.afterName}
                             </p>
-                            <div className="space-y-4">
-                                <div className="space-y-1">
-                                    <ExternalLink href={templates.member} prominent>
+                            <div className="grid gap-3">
+                                <div className="space-y-2 rounded-[18px] bg-canvas p-4 [&>a]:w-full [&>a]:px-4 [&>a]:text-[13px]">
+                                    <ExternalLink href={templates.member} outlined>
                                         {copy.memberLink}
                                     </ExternalLink>
                                     <p className="text-sm text-ink-3">{copy.memberHint}</p>
                                 </div>
-                                <div className="space-y-1">
-                                    <ExternalLink href={templates.ownerSharing}>{copy.ownerLink}</ExternalLink>
+                                <div className="space-y-2 rounded-[18px] bg-canvas p-4 [&>a]:w-full [&>a]:px-4 [&>a]:text-[13px]">
+                                    <ExternalLink href={templates.ownerSharing} outlined>
+                                        {copy.ownerLink}
+                                    </ExternalLink>
                                     <p className="text-sm text-ink-3">{copy.ownerHint}</p>
                                 </div>
                             </div>
@@ -98,7 +101,7 @@ export function ConnectionForm({
                     <p id={tokenHint} className="text-sm text-ink-3">
                         {copy.tokenHint}
                     </p>
-                    <Button type="submit" busy={busy}>
+                    <Button type="submit" busy={busy} className="min-h-12 w-full text-[15px]">
                         {copy.connect}
                     </Button>
                 </Step>
@@ -115,6 +118,7 @@ export function ConnectionChoices({
     back,
     hint,
     onAuthorize,
+    intro,
     children,
 }: {
     readonly repository: string;
@@ -123,18 +127,22 @@ export function ConnectionChoices({
     readonly back: string;
     readonly hint: string;
     readonly onAuthorize: () => void;
+    /** Shown above the choice only; the token form needs the room. */
+    readonly intro: ReactNode;
     readonly children: ReactNode;
 }) {
     const [usingToken, setUsingToken] = useState(false);
     return usingToken ? (
         <div className="space-y-4">
-            <Button variant="quiet" onClick={() => setUsingToken(false)}>
+            <Button variant="quiet" className="no-underline" onClick={() => setUsingToken(false)}>
+                <span aria-hidden="true">‹</span>
                 {back}
             </Button>
             {children}
         </div>
     ) : (
         <div className="space-y-4">
+            {intro}
             <Button onClick={onAuthorize} className="min-h-12 w-full text-[15px]">
                 {authorize}
             </Button>

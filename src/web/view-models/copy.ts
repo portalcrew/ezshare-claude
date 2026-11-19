@@ -161,6 +161,7 @@ export const connectCopy = {
 } as const;
 
 export const connectionFormCopy = {
+    title: "Sign in with a token",
     stepLabel: (step: number) => `Step ${step}: `,
     repositoryStep: "Confirm the team repository",
     repositoryLabel: "Repository",
