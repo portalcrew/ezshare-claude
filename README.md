@@ -127,7 +127,7 @@ GitHub connection, personal history key, interface preference, and saved history
 3. For production, configure a dedicated hostname in **Settings → Pages → Custom domain**, and make its DNS-only
    CNAME point to `<fork-owner>.github.io` without a repository path. Wait for the Pages certificate and enable
    **Enforce HTTPS**. The domain is configured once in Pages, not duplicated in an environment variable.
-   The current upstream deployment is https://ezshare-claude.connect-screen.com; forks do not inherit that domain.
+   The upstream launcher is available at https://ezshare-claude.morty.build/. Each fork configures its own domain.
 4. Treat the whole browser origin as trusted. Paths under one `<owner>.github.io` share browser storage and
    encryption keys with every other Pages site on that host. A repository path is not an isolation boundary.
    Only connect with a real token when all sites on that host are trusted, or use a dedicated custom hostname.
