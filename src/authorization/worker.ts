@@ -70,7 +70,7 @@ async function exchange(request: Request, env: Env, origin: string): Promise<Res
     }
     const upstream = await fetch("https://github.com/login/oauth/access_token", {
         method: "POST",
-        redirect: "error",
+        redirect: "manual",
         signal,
         headers: { Accept: "application/json" },
         body: new URLSearchParams({
@@ -97,7 +97,7 @@ async function exchange(request: Request, env: Env, origin: string): Promise<Res
         return reply(503, origin);
     }
     const granted = await fetch(`https://api.github.com/repos/${env.REPOSITORY}/actions/secrets?per_page=1`, {
-        redirect: "error",
+        redirect: "manual",
         signal,
         headers: {
             Authorization: `Bearer ${token.output.access_token}`,
