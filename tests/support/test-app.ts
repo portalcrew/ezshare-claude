@@ -27,6 +27,7 @@ export async function createTestApp(
     options: {
         readonly isPrivate?: boolean;
         readonly defaultRepository?: string;
+        readonly githubApp?: { readonly clientId: string; readonly brokerOrigin: string };
         readonly branchProtected?: boolean;
         readonly sharedToken?: string | null;
         readonly mortyFailure?:
@@ -83,6 +84,7 @@ export async function createTestApp(
     const launcherOptions = {
         apiOrigin: github.origin,
         clock,
+        ...(options.githubApp === undefined ? {} : { githubApp: options.githubApp }),
         ...(options.defaultRepository === undefined ? {} : { defaultRepository: options.defaultRepository }),
     };
     let unmount = mountLauncher(root(), launcherOptions);

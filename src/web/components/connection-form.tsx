@@ -110,6 +110,48 @@ export function ConnectionForm({
     );
 }
 
+/** Keep the alternate method visible without showing the full token setup until it is selected. */
+export function ConnectionChoices({
+    repository,
+    authorize,
+    manual,
+    back,
+    hint,
+    onAuthorize,
+    children,
+}: {
+    readonly repository: string;
+    readonly authorize: string;
+    readonly manual: string;
+    readonly back: string;
+    readonly hint: string;
+    readonly onAuthorize: () => void;
+    readonly children: ReactNode;
+}) {
+    const [usingToken, setUsingToken] = useState(false);
+    return usingToken ? (
+        <div className="space-y-4">
+            <Button variant="quiet" onClick={() => setUsingToken(false)}>
+                {back}
+            </Button>
+            {children}
+        </div>
+    ) : (
+        <div className="space-y-3">
+            <p className="text-sm">
+                <strong>{repository}</strong>
+            </p>
+            <p className="text-sm text-stone-600 dark:text-stone-400">{hint}</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+                <Button onClick={onAuthorize}>{authorize}</Button>
+                <Button variant="secondary" onClick={() => setUsingToken(true)}>
+                    {manual}
+                </Button>
+            </div>
+        </div>
+    );
+}
+
 function Step({
     number,
     label,

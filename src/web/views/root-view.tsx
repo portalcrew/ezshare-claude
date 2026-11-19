@@ -1,7 +1,7 @@
 import { useStore } from "zustand";
 import type { Clock } from "../../shared/async.ts";
 import { isAccessDenied } from "../../shared/errors.ts";
-import { ConnectionForm } from "../components/connection-form.tsx";
+import { ConnectionChoices, ConnectionForm } from "../components/connection-form.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { ExternalLink } from "../components/ui/external-link.tsx";
 import { Announcer, Notice } from "../components/ui/notice.tsx";
@@ -25,14 +25,25 @@ export function RootView({
     store,
     clock,
     defaultRepository,
+    authorizationAvailable,
 }: {
     readonly store: ApplicationStore;
     readonly clock: Clock;
     readonly defaultRepository: string;
+    readonly authorizationAvailable: boolean;
 }) {
     const phase = useStore(store, (state) => state.phase);
     const page = useStore(store, (state) => state.page);
     const actions = store.getState();
+    const manual = (
+        <ConnectionForm
+            copy={connectionFormCopy}
+            initialRepository={defaultRepository}
+            templatesFor={tokenTemplates}
+            busy={phase.kind === "connecting"}
+            onConnect={actions.connect}
+        />
+    );
     return (
         <div className="mx-auto max-w-2xl space-y-8 px-5 py-10 sm:py-16">
             <header className="space-y-3">
@@ -63,15 +74,22 @@ export function RootView({
                             {errorMessage(phase.error)}
                         </Notice>
                     )}
-                    {(phase.kind === "disconnected" || phase.kind === "connecting") && (
-                        <ConnectionForm
-                            copy={connectionFormCopy}
-                            initialRepository={defaultRepository}
-                            templatesFor={tokenTemplates}
-                            busy={phase.kind === "connecting"}
-                            onConnect={actions.connect}
-                        />
-                    )}
+                    {phase.kind === "authorizing" && <p role="status">{connectCopy.authorizing}</p>}
+                    {(phase.kind === "disconnected" || phase.kind === "connecting") &&
+                        (authorizationAvailable ? (
+                            <ConnectionChoices
+                                repository={defaultRepository}
+                                authorize={connectCopy.authorize}
+                                manual={connectCopy.manual}
+                                back={connectCopy.back}
+                                hint={connectCopy.authorizationHint}
+                                onAuthorize={actions.authorize}
+                            >
+                                {manual}
+                            </ConnectionChoices>
+                        ) : (
+                            manual
+                        ))}
                 </section>
             )}
         </div>
@@ -129,7 +147,13 @@ function Connected({
                 />
             </div>
             <div hidden={page !== "share"}>
-                <SharingView store={workspace.sharing} branchProtected={workspace.branchProtected} />
+                {workspace.authorization === "github-app" ? (
+                    <Notice tone="info" title={connectCopy.managementTitle}>
+                        {connectCopy.managementHint}
+                    </Notice>
+                ) : (
+                    <SharingView store={workspace.sharing} branchProtected={workspace.branchProtected} />
+                )}
             </div>
             <details className="text-sm text-stone-600 dark:text-stone-400">
                 <summary className="min-h-11 cursor-pointer py-3 font-medium">

@@ -7,6 +7,12 @@ import type { ChatOutcome } from "./chat-store.ts";
 /** User-facing text for every failure code. Each message says what happened and what to do next. */
 export function errorMessage(code: ConnectionError): string {
     switch (code) {
+        case "github_authorization_failed":
+            return "GitHub authorization was declined, expired, or could not be verified. Authorize again or use a fine-grained token.";
+        case "github_authorization_unavailable":
+            return "The GitHub authorization service is unavailable. Try again or use a fine-grained token.";
+        case "github_app_not_installed":
+            return "GitHub did not grant access to this repository. Check the account you authorized and ask an administrator to install the GitHub App, or use a fine-grained token.";
         case "classic_token":
             return "This looks like a classic token. Create a fine-grained token limited to this repository instead.";
         case "cancelled":
@@ -144,6 +150,14 @@ export const connectCopy = {
     restoring: "Restoring your connection…",
     disconnecting: "Removing your token…",
     failedTitle: "Could not connect",
+    authorize: "Authorize with GitHub",
+    authorizing: "Connecting to GitHub…",
+    authorizationHint: "Use a shared Claude account without creating a token.",
+    manual: "Use a fine-grained token",
+    back: "Back to GitHub authorization",
+    managementTitle: "Managing accounts requires a fine-grained token",
+    managementHint:
+        "GitHub authorization lets you use shared accounts. To add, reauthorize, or remove a Claude account, disconnect and use a token with Secrets: Read and write.",
 } as const;
 
 export const connectionFormCopy = {

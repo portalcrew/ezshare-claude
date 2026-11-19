@@ -4,6 +4,7 @@ import { type Clock, systemClock } from "../shared/async.ts";
 import { repositoryName } from "../shared/github/client.ts";
 import { GITHUB_API_ORIGIN } from "../shared/github/http.ts";
 import { DEFAULT_REPOSITORY } from "./config.ts";
+import { createGitHubAuthorization } from "./services/github-authorization.ts";
 import { createBrowserVault } from "./services/vault.ts";
 import { createApplicationStore } from "./view-models/application-store.ts";
 import { RootView } from "./views/root-view.tsx";
@@ -12,6 +13,7 @@ export interface LauncherOptions {
     readonly apiOrigin?: string;
     readonly clock?: Clock;
     readonly defaultRepository?: string;
+    readonly githubApp?: { readonly clientId: string; readonly brokerOrigin: string };
 }
 
 /** Composes and starts the launcher; the returned function ends every workflow it started. */
@@ -20,11 +22,21 @@ export function mountLauncher(root: HTMLElement, options: LauncherOptions = {}):
     const clock = options.clock ?? systemClock;
     const configured = options.defaultRepository ?? DEFAULT_REPOSITORY;
     const defaultRepository = configured.trim() === "" ? "" : repositoryName(configured);
-    const store = createApplicationStore({ apiOrigin, clock, vault: createBrowserVault(apiOrigin) });
+    const githubApp = options.githubApp ?? {
+        clientId: import.meta.env["VITE_GITHUB_APP_CLIENT_ID"] ?? "",
+        brokerOrigin: import.meta.env["VITE_GITHUB_AUTH_ORIGIN"] ?? "",
+    };
+    const authorization = createGitHubAuthorization({ ...githubApp, repository: defaultRepository });
+    const store = createApplicationStore({ apiOrigin, clock, vault: createBrowserVault(apiOrigin), authorization });
     const view = createRoot(root);
     view.render(
         <StrictMode>
-            <RootView store={store} clock={clock} defaultRepository={defaultRepository} />
+            <RootView
+                store={store}
+                clock={clock}
+                defaultRepository={defaultRepository}
+                authorizationAvailable={authorization !== null}
+            />
         </StrictMode>,
     );
     store.getState().open();

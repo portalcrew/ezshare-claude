@@ -105,3 +105,30 @@ test("Given a member connecting to a repository, When choosing how to use Claude
     expect(member.searchParams.get("secrets")).toBe("read");
     expect(sharing.searchParams.get("secrets")).toBe("write");
 });
+
+test("Given a launcher configured for GitHub App authorization, When a member opens setup, Then both connection methods are offered", async () => {
+    app = await createTestApp({
+        defaultRepository: REPOSITORY,
+        githubApp: { clientId: "Iv1_test", brokerOrigin: "https://authorization.example" },
+    });
+    expect(
+        await app.eventually(() => getByRole(document.body, "button", { name: "Authorize with GitHub" })),
+    ).toBeTruthy();
+    await app.user.click(getByRole(document.body, "button", { name: "Use a fine-grained token" }));
+    await connect(app, tokens.alice);
+    expect(await app.eventually(() => getByText(document.body, "alice"))).toBeTruthy();
+});
+
+test("Given a GitHub callback without a matching browser request, When the launcher opens, Then the callback is cleared and manual login still works", async () => {
+    history.replaceState(null, "", "?code=test-code&state=unrelated");
+    app = await createTestApp({
+        defaultRepository: REPOSITORY,
+        githubApp: { clientId: "Iv1_test", brokerOrigin: "https://authorization.example" },
+    });
+    const alert = await app.eventually(() => getByRole(document.body, "alert"));
+    expect(alert.textContent).toContain("GitHub authorization");
+    expect(location.search).toBe("");
+    await app.user.click(getByRole(document.body, "button", { name: "Use a fine-grained token" }));
+    await connect(app, tokens.alice);
+    expect(await app.eventually(() => getByText(document.body, "alice"))).toBeTruthy();
+});

@@ -2,6 +2,7 @@
     "$schema": "https://unpkg.com/knip@6/schema.json",
     "entry": [
         "src/web/main.tsx",
+        "src/authorization/worker.ts",
         "src/runner/main.ts",
         "src/runner/history-cache-worker.ts",
         "scripts/*.ts",

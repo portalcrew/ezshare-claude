@@ -1,0 +1,14 @@
+{
+    "name": "ezshare-claude-auth",
+    "main": "src/authorization/worker.ts",
+    "compatibility_date": "2026-11-19",
+    "workers_dev": true,
+    "preview_urls": false,
+    "observability": { "enabled": false },
+    "keep_vars": true,
+    "vars": {
+        "LAUNCHER_URL": "https://ezshare-claude.connect-screen.com/",
+        "REPOSITORY": "portalcrew/ezshare-claude",
+        "REPOSITORY_ID": "1456259654"
+    }
+}

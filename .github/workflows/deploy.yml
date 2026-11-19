@@ -32,6 +32,8 @@ jobs:
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - name: Check and build the launcher
         env:
+          VITE_GITHUB_APP_CLIENT_ID: ${{ vars.EZSHARE_GITHUB_APP_CLIENT_ID }}
+          VITE_GITHUB_AUTH_ORIGIN: ${{ vars.EZSHARE_GITHUB_AUTH_ORIGIN }}
           VITE_DEFAULT_REPOSITORY: ${{ github.repository }}
           PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
         run: pnpm ci:check
