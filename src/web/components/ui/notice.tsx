@@ -2,11 +2,10 @@ import type { ReactNode } from "react";
 import { cn } from "../utils/cn.ts";
 
 const tones = {
-    info: "border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-100",
-    success:
-        "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100",
-    warning: "border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100",
-    error: "border-red-300 bg-red-50 text-red-950 dark:border-red-800 dark:bg-red-950 dark:text-red-100",
+    info: "border-accent/20 bg-accent-subtle text-[#2f4fb8]",
+    success: "border-ok/25 bg-ok/10 text-[oklch(0.45_0.11_155)]",
+    warning: "border-[oklch(0.62_0.14_75/0.18)] bg-[oklch(0.98_0.03_85/0.8)] text-[oklch(0.48_0.12_70)]",
+    error: "border-danger/20 bg-[oklch(0.97_0.02_27/0.7)] text-danger",
 } as const;
 
 /** A message box. Errors are announced immediately; other tones are read in document order. */
@@ -22,9 +21,9 @@ export function Notice({
     return (
         <div
             role={tone === "error" ? "alert" : undefined}
-            className={cn("rounded-lg border px-4 py-3 text-sm", tones[tone])}
+            className={cn("rounded-[16px] border px-4 py-3 text-sm", tones[tone])}
         >
-            {title !== undefined && <p className="font-semibold">{title}</p>}
+            {title !== undefined && <p className="font-medium">{title}</p>}
             <div className={cn(title !== undefined && "mt-1")}>{children}</div>
         </div>
     );

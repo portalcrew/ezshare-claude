@@ -2,16 +2,14 @@ import type { ComponentProps, MouseEvent } from "react";
 import { cn } from "../utils/cn.ts";
 
 const variants = {
-    primary:
-        "bg-emerald-700 text-white hover:bg-emerald-800 dark:bg-emerald-500 dark:text-emerald-950 dark:hover:bg-emerald-400",
-    secondary:
-        "border border-stone-300 bg-white text-stone-900 hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100 dark:hover:bg-stone-800",
-    danger: "bg-red-700 text-white hover:bg-red-800 dark:bg-red-500 dark:text-red-950 dark:hover:bg-red-400",
-    quiet: "px-0 text-stone-600 underline underline-offset-4 hover:text-stone-900 dark:text-stone-300 dark:hover:text-white",
+    primary: "bg-ink text-white hover:bg-ink/85 active:bg-ink/75",
+    secondary: "border border-hairline bg-transparent text-ink hover:bg-fill active:bg-fill-strong",
+    danger: "bg-danger text-white hover:bg-danger/90 active:bg-danger/80",
+    quiet: "px-0 text-ink-2 underline decoration-ink-4 underline-offset-4 hover:text-ink",
 } as const;
 
 export const focusRing =
-    "outline-none focus-visible:ring-[3px] focus-visible:ring-emerald-600/60 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-stone-950";
+    "outline-none focus-visible:outline-[0.5px] focus-visible:outline-accent focus-visible:shadow-[0_0_0_3px_rgba(79,124,255,0.2)]";
 
 /**
  * A button that stays focusable while busy: `aria-disabled` keeps it in the tab order and announced, and clicks
@@ -42,10 +40,10 @@ export function Button({
                 }
             }}
             className={cn(
-                "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors motion-reduce:transition-none",
+                "inline-flex min-h-11 items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-medium transition-colors motion-reduce:transition-none",
                 focusRing,
                 variants[variant],
-                inactive && "cursor-not-allowed opacity-60",
+                inactive && "cursor-not-allowed opacity-50",
                 className,
             )}
         >

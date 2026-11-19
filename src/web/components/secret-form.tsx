@@ -43,12 +43,12 @@ export function SecretForm({
                     required
                     aria-describedby={hintId}
                     className={cn(
-                        "mt-1 block min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 font-mono text-sm dark:border-stone-600 dark:bg-stone-950",
+                        "mt-1 block min-h-11 w-full rounded-[14px] border border-hairline bg-white px-3 font-mono text-sm",
                         focusRing,
                     )}
                 />
             </label>
-            <p id={hintId} className="text-sm text-stone-600 dark:text-stone-400">
+            <p id={hintId} className="text-sm text-ink-3">
                 {hint}
             </p>
             <Button type="submit" busy={busy}>

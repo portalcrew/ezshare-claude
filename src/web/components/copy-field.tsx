@@ -26,7 +26,7 @@ export function CopyField({
                     value={value}
                     readOnly
                     onFocus={(event) => event.currentTarget.select()}
-                    className="min-h-11 min-w-0 rounded-lg border border-stone-300 bg-stone-50 px-3 font-mono text-xs dark:border-stone-600 dark:bg-stone-950"
+                    className="min-h-11 min-w-0 rounded-[14px] border border-hairline bg-canvas px-3 font-mono text-xs"
                 />
             </label>
             <Button
@@ -44,7 +44,7 @@ export function CopyField({
             >
                 {action}
             </Button>
-            <p role="status" className="text-sm text-stone-600 dark:text-stone-400">
+            <p role="status" className="text-sm text-ink-3">
                 {status === "copied" ? copied : status === "manual" ? manual : ""}
             </p>
         </div>
