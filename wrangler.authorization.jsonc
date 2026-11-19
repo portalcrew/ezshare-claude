@@ -7,7 +7,7 @@
     "observability": { "enabled": false },
     "keep_vars": true,
     "vars": {
-        "LAUNCHER_URL": "https://ezshare-claude.connect-screen.com/",
+        "LAUNCHER_URL": "https://ezshare-claude.morty.build/",
         "REPOSITORY": "portalcrew/ezshare-claude",
         "REPOSITORY_ID": "1456259654"
     }
